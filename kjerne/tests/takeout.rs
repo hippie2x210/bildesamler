@@ -1,6 +1,6 @@
 //! Hele veien for en Google Takeout-zip: utpakking, dato fra JSON, sortering og albumkopier.
 
-use bildesamler_kjerne::{lag_plan, modell::Datokilde, plan::Rolle, takeout};
+use cloudjumper_kjerne::{lag_plan, modell::Datokilde, plan::Rolle, takeout};
 use std::fs;
 use std::io::{Cursor, Write};
 

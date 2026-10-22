@@ -281,7 +281,7 @@ async function velgOriginal(gruppe, fil) {
   }
 }
 
-// «C:\...\.bildesamler\takeout\takeout-…\Takeout\Google Foto\Bilder fra 2019» → «Google Foto › Bilder fra 2019».
+// «C:\...\.cloudjumper\takeout\takeout-…\Takeout\Google Foto\Bilder fra 2019» → «Google Foto › Bilder fra 2019».
 function kortMappe(sti) {
   const deler = sti.split(/[\\/]/);
   deler.pop();

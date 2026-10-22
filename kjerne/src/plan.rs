@@ -146,7 +146,7 @@ impl Plan {
     }
 }
 
-/// Ligger filen i en utpakket Takeout-zip (`<mål>/.bildesamler/takeout/...`)?
+/// Ligger filen i en utpakket Takeout-zip (`<mål>/.cloudjumper/takeout/...`)?
 fn fra_takeout(sti: &Path) -> bool {
     let deler: Vec<_> = sti.components().map(|c| c.as_os_str()).collect();
     deler

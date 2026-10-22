@@ -10,7 +10,18 @@ use std::fs;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 
-pub const LOGGMAPPE: &str = ".bildesamler";
+pub const LOGGMAPPE: &str = ".cloudjumper";
+/// Navnet mappen hadde før appen het CloudJumper.
+pub const GAMMEL_LOGGMAPPE: &str = ".bildesamler";
+
+/// Gir en gammel `.bildesamler`-mappe det nye navnet, så angre-logger og nedlastinger blir med.
+/// Bare et navnebytte i appens egen mappe; ingenting slettes.
+pub fn flytt_gammel_mappe(mal: &Path) {
+    let (gammel, ny) = (mal.join(GAMMEL_LOGGMAPPE), mal.join(LOGGMAPPE));
+    if gammel.is_dir() && !ny.exists() {
+        let _ = fs::rename(gammel, ny);
+    }
+}
 pub const ANGRET: &str = "_Angret";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -30,6 +41,7 @@ pub struct Resultat {
 }
 
 pub fn utfor(plan: &Plan, fremdrift: &dyn Fn(usize, usize)) -> Result<Resultat> {
+    flytt_gammel_mappe(&plan.mal);
     let loggmappe = plan.mal.join(LOGGMAPPE).join("logg");
     fs::create_dir_all(&loggmappe).context("kunne ikke lage loggmappe i målet")?;
     let (loggsti, mut logg) = ny_logg(&loggmappe)?;
@@ -84,7 +96,7 @@ fn kopier_en(kilde: &Path, mal: &Path, til: &Path, sha: &str) -> Result<Option<P
     };
     let full = mal.join(&rel);
     fs::create_dir_all(full.parent().unwrap())?;
-    let tmp = full.with_extension("bildesamler-del");
+    let tmp = full.with_extension("cloudjumper-del");
     fs::copy(kilde, &tmp).with_context(|| format!("kopiering feilet: {}", kilde.display()))?;
     if sha256_fil(&tmp)? != sha {
         // Ikke slett: la den halve filen ligge synlig så brukeren ser hva som skjedde.
@@ -100,6 +112,7 @@ fn kopier_en(kilde: &Path, mal: &Path, til: &Path, sha: &str) -> Result<Option<P
 /// Angrer siste kjøring: flytter kopiene den laget til `_Angret/<tidspunkt>/`, bortsett fra
 /// filer som er endret siden. Returnerer antall flyttede filer.
 pub fn angre_siste(mal: &Path) -> Result<usize> {
+    flytt_gammel_mappe(mal);
     let loggmappe = mal.join(LOGGMAPPE).join("logg");
     let mut logger: Vec<PathBuf> = fs::read_dir(&loggmappe)
         .context("fant ingen tidligere kjøring å angre")?

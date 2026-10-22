@@ -82,7 +82,7 @@ pub fn pakk_ut(zip: &Path, mappe: &Path) -> Result<usize> {
     Ok(antall)
 }
 
-/// Bytter Takeout-zip-er blant kildene med mappene de pakkes ut i, under `<mål>/.bildesamler/takeout`.
+/// Bytter Takeout-zip-er blant kildene med mappene de pakkes ut i, under `<mål>/.cloudjumper/takeout`.
 /// En kildemappe beholdes, og Takeout-zip-er rett i den (som i Nedlastinger) pakkes ut i tillegg.
 /// Returnerer de nye kildene og varsler for zip-er som ikke kunne leses.
 fn filnavn(sti: &Path) -> String {
@@ -146,6 +146,7 @@ pub fn forbered_kilder(
     mal: &Path,
     fremdrift: &dyn Fn(usize, usize),
 ) -> (Vec<PathBuf>, Vec<String>) {
+    crate::utfor::flytt_gammel_mappe(mal);
     let mut zipper = Vec::new();
     let mut nye = Vec::new();
     for kilde in kilder {
@@ -352,13 +353,13 @@ mod tester {
         assert!(varsler.is_empty());
         assert_eq!(kilder.len(), 2);
         assert!(kilder[1].ends_with("Takeout/Google Foto"), "{:?}", kilder[1]);
-        let ut = mal.join(".bildesamler/takeout/takeout-20241022T101500Z-001/Takeout/Google Foto/Bilder fra 2019");
+        let ut = mal.join(".cloudjumper/takeout/takeout-20241022T101500Z-001/Takeout/Google Foto/Bilder fra 2019");
         assert_eq!(fs::read(ut.join("IMG_1.jpg")).unwrap(), b"jpeg");
         assert!(ut.join("IMG_1.jpg.json").exists());
         assert!(!ut.join("arkiv_nettleser.html").exists());
         assert!(!d.path().join("utenfor.jpg").exists());
         // Andre gang hoppes ferdige filer over, og zip-en er uendret.
-        assert_eq!(pakk_ut(&zipsti, &mal.join(".bildesamler/takeout/takeout-20241022T101500Z-001")).unwrap(), 2);
+        assert_eq!(pakk_ut(&zipsti, &mal.join(".cloudjumper/takeout/takeout-20241022T101500Z-001")).unwrap(), 2);
         assert_eq!(fs::read(&zipsti).unwrap(), foer);
     }
 

@@ -1,4 +1,4 @@
-//! Kjernen i Bildesamler: skanner mapper, leser datoer, finner duplikater og lager en plan.
+//! Kjernen i CloudJumper: skanner mapper, leser datoer, finner duplikater og lager en plan.
 //! Grunnregel: kjernen sletter aldri en fil.
 
 pub mod dato;
@@ -25,7 +25,7 @@ pub fn finn_filer(kilder: &[PathBuf], mal: &Path) -> Vec<PathBuf> {
             .into_iter()
             .filter_entry(|e| {
                 let navn = e.file_name().to_string_lossy();
-                let egen = navn == utfor::LOGGMAPPE || navn == utfor::ANGRET;
+                let egen = navn == utfor::LOGGMAPPE || navn == utfor::GAMMEL_LOGGMAPPE || navn == utfor::ANGRET;
                 let er_mal = e.path().canonicalize().is_ok_and(|p| p == mal);
                 !(egen || er_mal)
             })

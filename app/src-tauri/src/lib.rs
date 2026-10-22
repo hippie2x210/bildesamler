@@ -1,6 +1,6 @@
 //! Skallet rundt kjernen: kommandoer grensesnittet kan kalle, og fremdrift tilbake.
 
-use bildesamler_kjerne::{lag_plan, miniatyr, modell::{Datokilde, Tillit}, plan::Rolle, takeout, utfor, Plan};
+use cloudjumper_kjerne::{lag_plan, miniatyr, modell::{Datokilde, Tillit}, plan::Rolle, takeout, utfor, Plan};
 use cloudjumper_sky::google;
 use serde::Serialize;
 use std::path::{Path, PathBuf};
@@ -42,7 +42,7 @@ struct GruppeVisning {
 
 #[derive(Serialize)]
 struct Oversikt {
-    rapport: bildesamler_kjerne::plan::Rapport,
+    rapport: cloudjumper_kjerne::plan::Rapport,
     grupper: Vec<GruppeVisning>,
     advarsler: Vec<FilVisning>,
     uten_dato: Vec<FilVisning>,
@@ -471,7 +471,10 @@ fn merk_ferdig(mappe: &Path, fil: &Path) {
 /// Mappen Takeout-zip-ene lastes ned til: i samlingen hvis den er valgt, ellers i appens egen mappe.
 fn nedlastingsmappe(app: &AppHandle, mal: Option<&str>) -> Result<PathBuf, String> {
     let mappe = match mal.filter(|m| !m.trim().is_empty()) {
-        Some(m) => PathBuf::from(m).join(utfor::LOGGMAPPE).join("nedlastet"),
+        Some(m) => {
+            utfor::flytt_gammel_mappe(Path::new(m));
+            PathBuf::from(m).join(utfor::LOGGMAPPE).join("nedlastet")
+        }
         None => app.path().app_local_data_dir().map_err(|e| e.to_string())?.join("nedlastet"),
     };
     std::fs::create_dir_all(&mappe).map_err(|e| format!("Kunne ikke lage {}: {e}", mappe.display()))?;

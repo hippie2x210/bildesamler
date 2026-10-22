@@ -1,7 +1,7 @@
 //! Kjører hele flyten på testbildene i `testdata/` og sammenligner med `testdata/fasit.csv`.
 //! Testsettet lages av `tools/lag_testbilder.py`.
 
-use bildesamler_kjerne::{lag_plan, plan::Rolle, utfor};
+use cloudjumper_kjerne::{lag_plan, plan::Rolle, utfor};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
@@ -66,7 +66,7 @@ fn utfor_og_angre_sletter_ingenting() {
     let innboks = testdata().join("innboks");
     let mal = tempfile::tempdir().unwrap();
     let plan = lag_plan(&[innboks.clone()], mal.path(), &|_, _| {});
-    let antall_kilder = bildesamler_kjerne::finn_filer(&[innboks.clone()], mal.path()).len();
+    let antall_kilder = cloudjumper_kjerne::finn_filer(&[innboks.clone()], mal.path()).len();
 
     let res = utfor::utfor(&plan, &|_, _| {}).unwrap();
     assert!(res.feil.is_empty(), "{:?}", res.feil);
@@ -92,5 +92,5 @@ fn utfor_og_angre_sletter_ingenting() {
         .filter(|e| e.file_type().is_file())
         .count();
     assert_eq!(angret, plan.handlinger.len());
-    assert_eq!(bildesamler_kjerne::finn_filer(&[innboks.clone()], mal.path()).len(), antall_kilder);
+    assert_eq!(cloudjumper_kjerne::finn_filer(&[innboks.clone()], mal.path()).len(), antall_kilder);
 }

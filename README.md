@@ -11,7 +11,7 @@ Samling/
   Duplikater/2019/07/IMG-20190704-WA0001.jpg   (dårligere kopier av bilder som er beholdt)
   Uten dato/bilde1.jpg                          (ingen dato vi kan stole på)
   _Angret/…                                     (kopier som er angret, flyttes hit)
-  .bildesamler/logg/…                           (logg over hver kopiering, brukes av «Angre»)
+  .cloudjumper/logg/…                          (logg over hver kopiering, brukes av «Angre»)
 ```
 
 ## Hvordan datoen velges
@@ -40,7 +40,7 @@ Originalen er den med sikrest dato, deretter kameradata, GPS, oppløsning og fil
 | `testdata/` | Testbilder og `fasit.csv`, laget av `tools/lag_testbilder.py` |
 
 ```sh
-cargo test -p bildesamler-kjerne --release   # test mot fasiten
+cargo test -p cloudjumper-kjerne --release   # test mot fasiten
 cd app && npm ci && npx tauri dev            # kjør appen
 cd app && npx tauri build                    # lag Windows-installasjon
 ```

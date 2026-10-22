@@ -1,4 +1,4 @@
-"""Lager et kunstig testsett for Bildesamler med kjent fasit (fasit.csv).
+"""Lager et kunstig testsett for CloudJumper med kjent fasit (fasit.csv).
 
 Bruk: python lag_testbilder.py <utmappe>
 """
