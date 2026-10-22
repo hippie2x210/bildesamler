@@ -7,9 +7,91 @@
   <link rel="stylesheet" href="app.css">
 </head>
 <body>
-  <div class="window hoved">
+  <div class="window hoved veiviser" id="veiviser">
     <div class="title-bar">
-      <div class="title-bar-text">CloudJumper – samle og sortere bilder</div>
+      <div class="title-bar-text">CloudJumper – samle bildene dine på ett sted</div>
+    </div>
+    <div class="window-body">
+      <!-- Hver side er ett steg. Bare én vises om gangen. -->
+      <section data-steg="start">
+        <h1>Hei! Hvor er bildene dine?</h1>
+        <div class="store-valg">
+          <button class="stor" data-gaa="google">📷 Google Foto<small>Bildene du har tatt med mobilen og lagret hos Google</small></button>
+          <button class="stor" data-gaa="mappe">🗂️ En mappe eller minnepinne<small>Bilder som allerede ligger på PC-en eller en disk</small></button>
+        </div>
+        <p class="trygt">CloudJumper lager kopier. Originalbildene blir alltid liggende der de er, og ingenting slettes.</p>
+      </section>
+
+      <section data-steg="google" hidden>
+        <h1>Google Foto</h1>
+        <div class="trinn">
+          <h2>1. Be Google om bildene</h2>
+          <p>Google pakker bildene dine i en eller flere store filer. Det tar ofte noen timer, og du får en e-post når det er klart.</p>
+          <button class="stor-knapp" id="vvBestill">Be Google om bildene</button>
+          <p class="liten" id="vvBestilt" hidden></p>
+        </div>
+        <div class="trinn">
+          <h2>2. Hent bildene når Google er ferdig</h2>
+          <p>Trykk på knappen og så «Last ned» ved hver fil. CloudJumper tar imot filene selv.</p>
+          <button class="stor-knapp" id="vvHent">Hent bildene fra Google</button>
+          <button class="stor-knapp" id="vvGmail" hidden>Sjekk e-posten min og hent</button>
+          <p class="liten" id="vvNedlastet"></p>
+        </div>
+        <div class="trinn">
+          <h2>3. Sorter bildene</h2>
+          <button class="stor-knapp" id="vvGoogleSorter" disabled>Sorter bildene jeg har hentet</button>
+        </div>
+        <button class="tilbake" data-gaa="start">‹ Tilbake</button>
+      </section>
+
+      <section data-steg="mappe" hidden>
+        <h1>Hvor ligger bildene?</h1>
+        <p>Velg mappen, minnepinnen eller disken med bildene.</p>
+        <button class="stor-knapp" id="vvVelgMappe">Velg mappe …</button>
+        <p class="liten" id="vvMappe"></p>
+        <button class="tilbake" data-gaa="start">‹ Tilbake</button>
+      </section>
+
+      <section data-steg="samling" hidden>
+        <h1>Hvor skal bildene samles?</h1>
+        <p class="stor-tekst" id="vvSamling"></p>
+        <div class="store-valg">
+          <button class="stor-knapp" id="vvBrukSamling">Bruk denne</button>
+          <button class="stor-knapp" id="vvVelgSamling">Velg en annen, for eksempel en ekstern disk …</button>
+        </div>
+        <button class="tilbake" data-gaa="start">‹ Tilbake</button>
+      </section>
+
+      <section data-steg="jobber" hidden>
+        <h1 id="vvJobberTittel">Leser bildene …</h1>
+        <p class="stor-tekst" id="vvJobberTekst">Dette kan ta en stund. Du kan gjøre andre ting imens.</p>
+        <div class="fremdrift"><div class="linje stor-linje"><div id="vvLinje"></div></div></div>
+      </section>
+
+      <section data-steg="klar" hidden>
+        <h1>Dette fant CloudJumper</h1>
+        <ul class="funn" id="vvFunn"></ul>
+        <button class="stor-knapp hoved-knapp" id="vvKopier">Kopier bildene til samlingen</button>
+        <p class="liten">Vil du se detaljene først? <a href="#" id="vvDetaljer">Vis detaljer</a></p>
+        <button class="tilbake" data-gaa="start">‹ Avbryt</button>
+      </section>
+
+      <section data-steg="ferdig" hidden>
+        <h1>Ferdig! 🎉</h1>
+        <p class="stor-tekst" id="vvFerdigTekst"></p>
+        <button class="stor-knapp hoved-knapp" id="vvApne">Se bildene</button>
+        <button class="tilbake" data-gaa="start">Til start</button>
+      </section>
+
+      <div id="vvFeil" class="feil stor-tekst" hidden></div>
+      <p class="avansert-lenke"><a href="#" id="vvAvansert">Avansert visning</a></p>
+    </div>
+  </div>
+
+  <div class="window hoved" id="avansert" hidden>
+    <div class="title-bar">
+      <div class="title-bar-text">CloudJumper – avansert visning</div>
+      <div class="title-bar-controls"><button aria-label="Close" id="tilVeiviser" title="Tilbake til den enkle visningen"></button></div>
     </div>
     <div class="window-body">
       <div class="oppsett">
@@ -74,5 +156,6 @@
     </div>
   </div>
   <script src="app.js" charset="utf-8"></script>
+  <script src="veiviser.js" charset="utf-8"></script>
 </body>
 </html>

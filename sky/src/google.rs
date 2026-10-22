@@ -12,6 +12,8 @@ use std::time::Duration;
 
 /// Takeout-siden med bare Google Foto valgt.
 pub const TAKEOUT_FOTO: &str = "https://takeout.google.com/settings/takeout/custom/photos";
+/// Takeout-siden med eksportene som er klare til nedlasting.
+pub const TAKEOUT_NEDLASTINGER: &str = "https://takeout.google.com/settings/takeout/downloads";
 const AUTH: &str = "https://accounts.google.com/o/oauth2/v2/auth";
 const TOKEN: &str = "https://oauth2.googleapis.com/token";
 const GMAIL: &str = "https://gmail.googleapis.com/gmail/v1/users/me";

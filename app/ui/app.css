@@ -1,3 +1,6 @@
+/* hidden må vinne over display: flex og lignende. */
+[hidden] { display: none !important; }
+
 html, body {
   margin: 0;
   height: 100%;
@@ -114,3 +117,27 @@ table.tall td:last-child { text-align: right; font-weight: bold; }
 
 .liste { width: 100%; border-collapse: collapse; background: #fff; }
 .liste th, .liste td { text-align: left; padding: 3px 6px; border-bottom: 1px solid #eee; vertical-align: top; }
+
+/* --- Veiviseren: stor tekst og store knapper, ett steg om gangen --- */
+
+.veiviser .window-body { font-size: 18px; padding: 18px 28px; }
+.veiviser h1 { font-size: 28px; margin: 6px 0 14px; color: #0a246a; }
+.veiviser h2 { font-size: 20px; margin: 0 0 6px; }
+.veiviser p { margin: 6px 0 12px; line-height: 1.45; max-width: 46em; }
+.veiviser button { font-size: 18px; font-family: Tahoma, "Segoe UI", sans-serif; }
+.store-valg { display: flex; gap: 18px; flex-wrap: wrap; margin: 12px 0; }
+.veiviser button.stor {
+  width: 340px; min-height: 140px; padding: 16px; font-size: 24px; text-align: left;
+  display: flex; flex-direction: column; gap: 8px; justify-content: center;
+}
+.veiviser button.stor small { font-size: 16px; color: #333; }
+.veiviser .stor-knapp { min-height: 52px; padding: 8px 22px; margin: 4px 0; }
+.veiviser .hoved-knapp { font-weight: bold; min-height: 64px; font-size: 22px; }
+.veiviser .trinn { border: 1px solid #aca899; background: #fff; padding: 12px 16px; margin-bottom: 12px; }
+.veiviser .tilbake { margin-top: 18px; min-height: 40px; }
+.veiviser .liten { font-size: 15px; color: #333; }
+.veiviser .stor-tekst { font-size: 20px; }
+.veiviser .trygt { margin-top: 20px; color: #1c5a1c; }
+.veiviser .funn { font-size: 20px; line-height: 1.7; }
+.veiviser .stor-linje { height: 28px; max-width: 700px; }
+.veiviser .avansert-lenke { margin-top: auto; align-self: flex-end; font-size: 13px; }

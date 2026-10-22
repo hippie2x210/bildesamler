@@ -242,18 +242,29 @@ fn google_klient(app: &AppHandle) -> Result<google::Klient, String> {
 
 #[derive(Serialize)]
 struct GoogleStatus {
+    /// Gmail-sjekk er mulig (klienten fra Google Cloud finnes).
     satt_opp: bool,
     innlogget: bool,
     nedlastinger: Option<String>,
+    /// Forslag til samling: Bilder\CloudJumper i brukerens egen bildemappe.
+    standard_samling: Option<String>,
 }
 
 #[tauri::command]
 fn google_status(app: AppHandle) -> GoogleStatus {
+    let sti = |p: Result<PathBuf, tauri::Error>| p.ok().map(|p| p.to_string_lossy().into_owned());
     GoogleStatus {
         satt_opp: google_klient(&app).is_ok(),
         innlogget: google::er_innlogget(),
-        nedlastinger: app.path().download_dir().ok().map(|p| p.to_string_lossy().into_owned()),
+        nedlastinger: sti(app.path().download_dir()),
+        standard_samling: sti(app.path().picture_dir().map(|p| p.join("CloudJumper"))),
     }
+}
+
+/// Mappen nedlastinger fra Google-vinduet havner i, så veiviseren kan skanne den.
+#[tauri::command]
+fn google_nedlastingsmappe(app: AppHandle, mal: Option<String>) -> Result<String, String> {
+    nedlastingsmappe(&app, mal.as_deref()).map(|p| p.to_string_lossy().into_owned())
 }
 
 #[tauri::command]
@@ -279,10 +290,113 @@ fn google_logg_ut() -> Result<(), String> {
     google::logg_ut().map_err(|e| format!("{e:#}"))
 }
 
-/// Finner den nyeste Takeout-e-posten og åpner nedlastingslenkene i nettleseren,
-/// der brukeren allerede er logget inn hos Google. Zip-filene havner i Nedlastinger.
+/// Forklaringen som vises øverst i Google-vinduet, så brukeren vet hva hen skal trykke på.
+/// Skriptet leser ingenting fra siden, det legger bare en stripe med tekst over den.
+const GOOGLE_HJELP: &str = r#"
+(function () {
+  if (window.top !== window) return;
+  function tekst() {
+    var h = location.host, p = location.pathname;
+    if (h.indexOf("accounts.google.") === 0) return "Logg inn med Google-kontoen din. CloudJumper ser aldri passordet ditt.";
+    if (h === "takeout.google.com" && p.indexOf("/settings/takeout/downloads") === 0)
+      return "Trykk «Last ned» ved hver fil. CloudJumper tar imot filene og sorterer bildene selv.";
+    if (h === "takeout.google.com" && p.indexOf("/takeout/download") === 0)
+      return "Filen lastes ned til CloudJumper. Du kan vente her.";
+    if (h === "takeout.google.com")
+      return "Bare Google Foto er valgt. Bla helt ned og trykk «Neste trinn», og så «Opprett eksport». Google sender en e-post når bildene er klare (ofte noen timer). Du kan lukke vinduet så lenge.";
+    return "";
+  }
+  function vis() {
+    var t = tekst(), d = document.getElementById("cloudjumper-hjelp");
+    if (!t) { if (d) d.remove(); return; }
+    if (!d) {
+      d = document.createElement("div");
+      d.id = "cloudjumper-hjelp";
+      d.style.cssText = "position:fixed;left:0;right:0;bottom:0;z-index:2147483647;background:#ffffcc;color:#000;border-top:3px solid #0a246a;font:20px Tahoma,Segoe UI,sans-serif;padding:14px 18px;box-shadow:0 -2px 8px rgba(0,0,0,.3);pointer-events:none";
+      (document.body || document.documentElement).appendChild(d);
+    }
+    d.textContent = "CloudJumper: " + t;
+  }
+  document.addEventListener("DOMContentLoaded", vis);
+  setInterval(vis, 1500);
+})();
+"#;
+
+#[derive(Clone, Serialize)]
+struct GoogleNedlasting {
+    fil: String,
+    ferdig: bool,
+    ok: bool,
+}
+
+/// Mappen Takeout-zip-ene lastes ned til: i samlingen hvis den er valgt, ellers i appens egen mappe.
+fn nedlastingsmappe(app: &AppHandle, mal: Option<&str>) -> Result<PathBuf, String> {
+    let mappe = match mal.filter(|m| !m.trim().is_empty()) {
+        Some(m) => PathBuf::from(m).join(utfor::LOGGMAPPE).join("nedlastet"),
+        None => app.path().app_local_data_dir().map_err(|e| e.to_string())?.join("nedlastet"),
+    };
+    std::fs::create_dir_all(&mappe).map_err(|e| format!("Kunne ikke lage {}: {e}", mappe.display()))?;
+    Ok(mappe)
+}
+
+/// Åpner (eller bytter side i) CloudJumper sitt eget Google-vindu. Brukeren forlater aldri appen,
+/// og nedlastinger fanges opp og legges i `nedlastet`-mappen i stedet for i Nedlastinger.
+fn apne_google_vindu(app: &AppHandle, adresse: &str, mal: Option<&str>) -> Result<(), String> {
+    let url: tauri::Url = adresse.parse().map_err(|e| format!("{e}"))?;
+    if let Some(vindu) = app.get_webview_window("google") {
+        vindu.navigate(url).map_err(|e| e.to_string())?;
+        let _ = vindu.unminimize();
+        let _ = vindu.set_focus();
+        return Ok(());
+    }
+    let mappe = nedlastingsmappe(app, mal)?;
+    let app2 = app.clone();
+    tauri::WebviewWindowBuilder::new(app, "google", tauri::WebviewUrl::External(url))
+        .title("CloudJumper – Google Foto")
+        .inner_size(1000.0, 800.0)
+        .initialization_script(GOOGLE_HJELP)
+        .on_download(move |_, hendelse| {
+            match hendelse {
+                tauri::webview::DownloadEvent::Requested { destination, .. } => {
+                    let navn = destination.file_name().map(|n| n.to_os_string()).unwrap_or_else(|| "takeout.zip".into());
+                    *destination = mappe.join(navn);
+                    let _ = app2.emit(
+                        "google-nedlasting",
+                        GoogleNedlasting { fil: destination.to_string_lossy().into_owned(), ferdig: false, ok: true },
+                    );
+                }
+                tauri::webview::DownloadEvent::Finished { path, success, .. } => {
+                    let _ = app2.emit(
+                        "google-nedlasting",
+                        GoogleNedlasting {
+                            fil: path.map(|p| p.to_string_lossy().into_owned()).unwrap_or_default(),
+                            ferdig: true,
+                            ok: success,
+                        },
+                    );
+                }
+                _ => {}
+            }
+            true
+        })
+        .build()
+        .map_err(|e| format!("Kunne ikke åpne Google-vinduet: {e}"))?;
+    Ok(())
+}
+
+/// Åpner Takeout med bare Google Foto valgt, inne i CloudJumper.
 #[tauri::command]
-async fn google_hent(app: AppHandle) -> Result<Option<google::TakeoutPost>, String> {
+fn google_vindu(app: AppHandle, mal: Option<String>, side: Option<String>) -> Result<(), String> {
+    let adresse = match side.as_deref() {
+        Some("nedlastinger") => google::TAKEOUT_NEDLASTINGER,
+        _ => google::TAKEOUT_FOTO,
+    };
+    apne_google_vindu(&app, adresse, mal.as_deref())
+}
+
+/// Finner den nyeste Takeout-e-posten i Gmail og åpner nedlastingslenkene i Google-vinduet.
+#[tauri::command]
+async fn google_hent(app: AppHandle, mal: Option<String>) -> Result<Option<google::TakeoutPost>, String> {
     let klient = google_klient(&app)?;
     let poster = tauri::async_runtime::spawn_blocking(move || google::finn_takeout(&klient))
         .await
@@ -290,11 +404,15 @@ async fn google_hent(app: AppHandle) -> Result<Option<google::TakeoutPost>, Stri
         .map_err(|e| format!("{e:#}"))?;
     let Some(nyeste) = poster.into_iter().next() else { return Ok(None) };
     for lenke in &nyeste.lenker {
-        tauri_plugin_opener::open_url(lenke, None::<&str>).map_err(|e| e.to_string())?;
-        // Litt pause, så nettleseren ikke blokkerer mange nedlastinger på en gang.
-        std::thread::sleep(std::time::Duration::from_millis(800));
+        apne_google_vindu(&app, lenke, mal.as_deref())?;
+        // Litt pause mellom delene, så hver nedlasting rekker å starte.
+        pause(std::time::Duration::from_secs(3)).await;
     }
     Ok(Some(nyeste))
+}
+
+async fn pause(d: std::time::Duration) {
+    let _ = tauri::async_runtime::spawn_blocking(move || std::thread::sleep(d)).await;
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -313,6 +431,8 @@ pub fn run() {
             apne_mappe,
             google_status,
             google_bestill,
+            google_vindu,
+            google_nedlastingsmappe,
             google_logg_inn,
             google_logg_ut,
             google_hent
