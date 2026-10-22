@@ -310,6 +310,29 @@ const GOOGLE_HJELP: &str = r#"
     }
     return ut;
   }
+  // Reserve hvis Google ikke bruker vanlige lenker: knappene som heter «Last ned».
+  function knapper() {
+    var ut = [], e = document.querySelectorAll('a,button,[role="button"]');
+    for (var i = 0; i < e.length; i++) {
+      var t = (e[i].innerText || "").trim();
+      if (/(^|\s)(Last ned|Download)$/i.test(t) && e[i].id !== "cloudjumper-alle") ut.push(e[i]);
+    }
+    // En lenke rundt en knapp skal bare trykkes én gang.
+    return ut.filter(function (x) { return !ut.some(function (y) { return y !== x && y.contains(x); }); });
+  }
+  function antallFiler() { return lenker().length || knapper().length; }
+  function klikkAlle() {
+    var k = knapper(), i = 0;
+    (function neste() {
+      if (i >= k.length) {
+        status = "Alle " + k.length + " nedlastingene er startet. La vinduet stå åpent til CloudJumper sier at de er ferdige.";
+        opptatt = false; vis(); return;
+      }
+      status = "Starter fil " + (i + 1) + " av " + k.length + " …"; vis();
+      k[i++].click();
+      setTimeout(neste, 5000);
+    })();
+  }
   function tekst(antall) {
     var h = location.host, p = location.pathname;
     if (h.indexOf("accounts.google.") === 0)
@@ -324,8 +347,8 @@ const GOOGLE_HJELP: &str = r#"
     return "Trykk på den øverste linjen i listen (den nyeste) for å se filene. Står det ikke «Ferdig» ennå, er Google ikke klar.";
   }
   function vis() {
-    var liste = lenker(), t = tekst(liste.length), d = document.getElementById("cloudjumper-hjelp");
-    var nokkel = t + "|" + liste.length + "|" + opptatt;
+    var antall = antallFiler(), t = tekst(antall), d = document.getElementById("cloudjumper-hjelp");
+    var nokkel = t + "|" + antall + "|" + opptatt;
     if (nokkel === sist && (d || !t)) return;
     sist = nokkel;
     if (!t) { if (d) d.remove(); return; }
@@ -340,14 +363,16 @@ const GOOGLE_HJELP: &str = r#"
     s.style.flex = "1";
     s.textContent = "CloudJumper: " + t;
     d.appendChild(s);
-    if (liste.length && !opptatt) {
+    if (antall && !opptatt) {
       var b = document.createElement("button");
-      b.textContent = "Last ned alle (" + liste.length + ")";
+      b.id = "cloudjumper-alle";
+      b.textContent = "Last ned alle (" + antall + ")";
       b.style.cssText = "pointer-events:auto;font:bold 20px Tahoma,Segoe UI,sans-serif;padding:10px 22px;background:#2fb32f;color:#fff;border:2px solid #1d7a1d;border-radius:4px;cursor:pointer";
       b.onclick = function () {
         status = "Starter nedlastingen …";
         opptatt = true;
         vis();
+        if (!lenker().length) { klikkAlle(); return; }
         location.href = "https://cloudjumper.invalid/last-ned-alle?l=" + encodeURIComponent(JSON.stringify(lenker()));
       };
       d.appendChild(b);
