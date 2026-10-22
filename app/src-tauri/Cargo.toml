@@ -19,6 +19,7 @@ tauri = { version = "2", features = ["protocol-asset"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"
 tauri-plugin-single-instance = "2"
+percent-encoding = "2"
 serde.workspace = true
 serde_json.workspace = true
 chrono.workspace = true

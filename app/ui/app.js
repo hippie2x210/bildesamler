@@ -229,9 +229,14 @@ function visResultat() {
   $("advarsler").replaceChildren(filTabell(o.advarsler, "Ingen advarsler."));
 }
 
+// Videoer og bilder som ikke kan leses får ingen forhåndsvisning, bare en grå flate.
+function skjulBilde(e) {
+  e.target.style.visibility = "hidden";
+}
+
 function kort(f, gruppe, erOriginal) {
   return el("div", { class: "kort" + (erOriginal ? " original" : "") },
-    el("img", { src: convertFileSrc(f.sti), loading: "lazy", alt: f.navn }),
+    el("img", { src: convertFileSrc(f.sti, "mini"), loading: "lazy", decoding: "async", alt: f.navn, onerror: skjulBilde }),
     el("div", { class: "info" },
       el("b", {}, f.navn), el("br"),
       `${f.bredde}×${f.hoyde}, ${storrelse(f.storrelse)}`, el("br"),
@@ -293,7 +298,7 @@ function filTabell(filer, tom, vis = RADER) {
     el("tr", {}, el("th", {}, ""), el("th", {}, "Fil"), el("th", {}, "Dato"), el("th", {}, "Merknad")),
     filer.slice(0, vis).map((f) =>
       el("tr", {},
-        el("td", { class: "mini" }, el("img", { src: convertFileSrc(f.sti), loading: "lazy", alt: "" })),
+        el("td", { class: "mini" }, el("img", { src: convertFileSrc(f.sti, "mini"), loading: "lazy", decoding: "async", alt: "", onerror: skjulBilde })),
         el("td", { title: f.sti }, el("b", {}, f.navn), el("br"), el("span", { class: "mappe" }, kortMappe(f.sti))),
         el("td", {}, f.dato ?? "–"),
         el("td", {}, f.advarsler.join(" "))

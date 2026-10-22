@@ -514,6 +514,7 @@ dependencies = [
  "bildesamler-kjerne",
  "chrono",
  "cloudjumper-sky",
+ "percent-encoding",
  "serde",
  "serde_json",
  "tauri",

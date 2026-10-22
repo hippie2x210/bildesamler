@@ -4,6 +4,7 @@
 pub mod dato;
 pub mod likhet;
 pub mod metadata;
+pub mod miniatyr;
 pub mod modell;
 pub mod plan;
 pub mod takeout;

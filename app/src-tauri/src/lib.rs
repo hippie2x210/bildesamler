@@ -1,6 +1,6 @@
 //! Skallet rundt kjernen: kommandoer grensesnittet kan kalle, og fremdrift tilbake.
 
-use bildesamler_kjerne::{lag_plan, modell::{Datokilde, Tillit}, plan::Rolle, takeout, utfor, Plan};
+use bildesamler_kjerne::{lag_plan, miniatyr, modell::{Datokilde, Tillit}, plan::Rolle, takeout, utfor, Plan};
 use cloudjumper_sky::google;
 use serde::Serialize;
 use std::path::{Path, PathBuf};
@@ -294,33 +294,66 @@ fn google_logg_ut() -> Result<(), String> {
     google::logg_ut().map_err(|e| format!("{e:#}"))
 }
 
-/// Forklaringen som vises øverst i Google-vinduet, så brukeren vet hva hen skal trykke på.
-/// Skriptet leser ingenting fra siden, det legger bare en stripe med tekst over den.
+/// Forklaringen nederst i Google-vinduet, så brukeren vet hva hen skal trykke på. På siden med
+/// eksportens filer legger den også en knapp «Last ned alle», så ingen må trykke «Last ned» 14 ganger.
+/// Skriptet sender ingenting fra siden, bortsett fra adressene til nedlastingene når knappen trykkes.
 const GOOGLE_HJELP: &str = r#"
 (function () {
   if (window.top !== window) return;
-  function tekst() {
+  var status = "", opptatt = false, sist = "";
+  function lenker() {
+    var sett = {}, ut = [];
+    var a = document.querySelectorAll('a[href*="takeout/download"]');
+    for (var i = 0; i < a.length; i++) {
+      var h = a[i].href;
+      if (!sett[h]) { sett[h] = 1; ut.push(h); }
+    }
+    return ut;
+  }
+  function tekst(antall) {
     var h = location.host, p = location.pathname;
-    if (h.indexOf("accounts.google.") === 0) return "Logg inn med Google-kontoen din. CloudJumper ser aldri passordet ditt.";
-    if (h === "takeout.google.com" && p.indexOf("/settings/takeout/downloads") === 0)
-      return "Trykk «Last ned» ved hver fil. CloudJumper tar imot filene og sorterer bildene selv.";
-    if (h === "takeout.google.com" && p.indexOf("/takeout/download") === 0)
-      return "Filen lastes ned til CloudJumper. Du kan vente her.";
-    if (h === "takeout.google.com")
+    if (h.indexOf("accounts.google.") === 0)
+      return "Logg inn med Google-kontoen din. CloudJumper ser aldri passordet ditt.";
+    if (h !== "takeout.google.com") return "";
+    if (status) return status;
+    if (antall)
+      return "Google har delt bildene i " + (antall === 1 ? "én fil" : antall + " filer") + ". Trykk den grønne knappen, så henter CloudJumper alle.";
+    if (p.indexOf("/takeout/download") === 0) return "Filen lastes ned til CloudJumper. Du kan vente her.";
+    if (p.indexOf("/settings/takeout/custom") === 0)
       return "Bare Google Foto er valgt. Bla helt ned og trykk «Neste trinn», og så «Opprett eksport». Google sender en e-post når bildene er klare (ofte noen timer). Du kan lukke vinduet så lenge.";
-    return "";
+    return "Trykk på den øverste linjen i listen (den nyeste) for å se filene. Står det ikke «Ferdig» ennå, er Google ikke klar.";
   }
   function vis() {
-    var t = tekst(), d = document.getElementById("cloudjumper-hjelp");
+    var liste = lenker(), t = tekst(liste.length), d = document.getElementById("cloudjumper-hjelp");
+    var nokkel = t + "|" + liste.length + "|" + opptatt;
+    if (nokkel === sist && (d || !t)) return;
+    sist = nokkel;
     if (!t) { if (d) d.remove(); return; }
     if (!d) {
       d = document.createElement("div");
       d.id = "cloudjumper-hjelp";
-      d.style.cssText = "position:fixed;left:0;right:0;bottom:0;z-index:2147483647;background:#ffffcc;color:#000;border-top:3px solid #0a246a;font:20px Tahoma,Segoe UI,sans-serif;padding:14px 18px;box-shadow:0 -2px 8px rgba(0,0,0,.3);pointer-events:none";
+      d.style.cssText = "position:fixed;left:0;right:0;bottom:0;z-index:2147483647;background:#ffffcc;color:#000;border-top:3px solid #0a246a;font:20px Tahoma,Segoe UI,sans-serif;padding:14px 18px;box-shadow:0 -2px 8px rgba(0,0,0,.3);pointer-events:none;display:flex;align-items:center;gap:16px";
       (document.body || document.documentElement).appendChild(d);
     }
-    d.textContent = "CloudJumper: " + t;
+    d.textContent = "";
+    var s = document.createElement("span");
+    s.style.flex = "1";
+    s.textContent = "CloudJumper: " + t;
+    d.appendChild(s);
+    if (liste.length && !opptatt) {
+      var b = document.createElement("button");
+      b.textContent = "Last ned alle (" + liste.length + ")";
+      b.style.cssText = "pointer-events:auto;font:bold 20px Tahoma,Segoe UI,sans-serif;padding:10px 22px;background:#2fb32f;color:#fff;border:2px solid #1d7a1d;border-radius:4px;cursor:pointer";
+      b.onclick = function () {
+        status = "Starter nedlastingen …";
+        opptatt = true;
+        vis();
+        location.href = "https://cloudjumper.invalid/last-ned-alle?l=" + encodeURIComponent(JSON.stringify(lenker()));
+      };
+      d.appendChild(b);
+    }
   }
+  window.cloudjumperStatus = function (t, ferdig) { status = t; opptatt = !ferdig; vis(); };
   document.addEventListener("DOMContentLoaded", vis);
   setInterval(vis, 1500);
 })();
@@ -331,6 +364,83 @@ struct GoogleNedlasting {
     fil: String,
     ferdig: bool,
     ok: bool,
+}
+
+/// «Last ned alle»: filene som venter, og hvor mange som lastes ned akkurat nå. To om gangen holder
+/// linja i bruk uten at en treg forbindelse må dele seg på 14 store filer.
+#[derive(Default)]
+struct Ko {
+    venter: std::collections::VecDeque<tauri::Url>,
+    aktive: usize,
+    totalt: usize,
+    ferdige: usize,
+    feilet: usize,
+}
+
+const SAMTIDIGE: usize = 2;
+static KO: Mutex<Ko> = Mutex::new(Ko { venter: std::collections::VecDeque::new(), aktive: 0, totalt: 0, ferdige: 0, feilet: 0 });
+
+/// Starter neste fil i køen hvis det er plass, og viser fremdriften nederst i Google-vinduet.
+fn neste_i_ko(app: &AppHandle) {
+    let (neste, tekst) = {
+        let mut ko = KO.lock().unwrap();
+        let neste = if ko.aktive < SAMTIDIGE { ko.venter.pop_front() } else { None };
+        if neste.is_some() {
+            ko.aktive += 1;
+        }
+        // (tekst, ferdig): når køen er tom kan knappen vises igjen.
+        let tekst = if ko.totalt == 0 {
+            None
+        } else if ko.ferdige + ko.feilet < ko.totalt {
+            Some((
+                format!(
+                    "Henter filene fra Google: {} av {} er ferdige. La vinduet stå åpent, dette kan ta lang tid.",
+                    ko.ferdige, ko.totalt
+                ),
+                false,
+            ))
+        } else if ko.feilet > 0 {
+            Some((
+                format!(
+                    "{} av {} filer stoppet underveis. Trykk «Last ned alle» igjen. Filene som er ferdige, hentes ikke på nytt.",
+                    ko.feilet, ko.totalt
+                ),
+                true,
+            ))
+        } else {
+            Some((format!("Alle {} filene er hentet. Lukk dette vinduet og trykk «Sorter bildene» i CloudJumper.", ko.totalt), true))
+        };
+        (neste, tekst)
+    };
+    let Some(vindu) = app.get_webview_window("google") else { return };
+    if let Some((t, ferdig)) = tekst {
+        let _ = vindu.eval(format!(
+            "window.cloudjumperStatus && window.cloudjumperStatus({}, {ferdig})",
+            serde_json::json!(t)
+        ));
+    }
+    if let Some(url) = neste {
+        let _ = vindu.navigate(url);
+    }
+}
+
+/// Filene som er lastet helt ned før. De hoppes over hvis brukeren trykker «Last ned alle» igjen.
+fn ferdigliste(mappe: &Path) -> PathBuf {
+    mappe.join("ferdige.txt")
+}
+
+fn er_ferdig(mappe: &Path, fil: &Path) -> bool {
+    let Some(navn) = fil.file_name().and_then(|n| n.to_str()) else { return false };
+    fil.exists() && std::fs::read_to_string(ferdigliste(mappe)).is_ok_and(|s| s.lines().any(|l| l == navn))
+}
+
+fn merk_ferdig(mappe: &Path, fil: &Path) {
+    use std::io::Write;
+    if let Some(navn) = fil.file_name().and_then(|n| n.to_str()) {
+        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(ferdigliste(mappe)) {
+            let _ = writeln!(f, "{navn}");
+        }
+    }
 }
 
 /// Mappen Takeout-zip-ene lastes ned til: i samlingen hvis den er valgt, ellers i appens egen mappe.
@@ -355,21 +465,84 @@ fn apne_google_vindu(app: &AppHandle, adresse: &str, mal: Option<&str>) -> Resul
     }
     let mappe = nedlastingsmappe(app, mal)?;
     let app2 = app.clone();
+    let app3 = app.clone();
     let vindu = tauri::WebviewWindowBuilder::new(app, "google", tauri::WebviewUrl::External(url))
         .title("CloudJumper – Google Foto")
         .inner_size(1000.0, 800.0)
         .initialization_script(GOOGLE_HJELP)
+        .on_navigation(move |url| {
+            if url.host_str() != Some("cloudjumper.invalid") {
+                return true;
+            }
+            let lenker: Vec<tauri::Url> = url
+                .query_pairs()
+                .find(|(k, _)| k == "l")
+                .and_then(|(_, v)| serde_json::from_str::<Vec<String>>(&v).ok())
+                .unwrap_or_default()
+                .into_iter()
+                .filter_map(|l| l.parse::<tauri::Url>().ok())
+                .filter(|l| l.host_str() == Some("takeout.google.com"))
+                .collect();
+            {
+                let mut ko = KO.lock().unwrap();
+                *ko = Ko { totalt: lenker.len(), venter: lenker.into(), ..Ko::default() };
+            }
+            let app = app3.clone();
+            tauri::async_runtime::spawn(async move {
+                for _ in 0..SAMTIDIGE {
+                    neste_i_ko(&app);
+                    // Litt pause, så den første nedlastingen rekker å starte før neste side åpnes.
+                    pause(std::time::Duration::from_secs(3)).await;
+                }
+            });
+            false
+        })
         .on_download(move |_, hendelse| {
             match hendelse {
                 tauri::webview::DownloadEvent::Requested { destination, .. } => {
                     let navn = destination.file_name().map(|n| n.to_os_string()).unwrap_or_else(|| "takeout.zip".into());
                     *destination = mappe.join(navn);
+                    if er_ferdig(&mappe, destination) {
+                        // Hentet før: hopp over og gå videre til neste.
+                        {
+                            let mut ko = KO.lock().unwrap();
+                            ko.aktive = ko.aktive.saturating_sub(1);
+                            ko.ferdige += 1;
+                        }
+                        let _ = app2.emit(
+                            "google-nedlasting",
+                            GoogleNedlasting { fil: destination.to_string_lossy().into_owned(), ferdig: true, ok: true },
+                        );
+                        let app = app2.clone();
+                        tauri::async_runtime::spawn(async move { neste_i_ko(&app) });
+                        return false;
+                    }
                     let _ = app2.emit(
                         "google-nedlasting",
                         GoogleNedlasting { fil: destination.to_string_lossy().into_owned(), ferdig: false, ok: true },
                     );
                 }
                 tauri::webview::DownloadEvent::Finished { path, success, .. } => {
+                    if let (Some(p), true) = (&path, success) {
+                        merk_ferdig(&mappe, p);
+                    }
+                    let i_ko = {
+                        let mut ko = KO.lock().unwrap();
+                        let i_ko = ko.totalt > 0;
+                        if i_ko {
+                            ko.aktive = ko.aktive.saturating_sub(1);
+                            if success {
+                                ko.ferdige += 1;
+                            } else {
+                                ko.feilet += 1;
+                            }
+                        }
+                        i_ko
+                    };
+                    if i_ko {
+                        let app = app2.clone();
+                        tauri::async_runtime::spawn(async move { neste_i_ko(&app) });
+                    }
                     let _ = app2.emit(
                         "google-nedlasting",
                         GoogleNedlasting {
@@ -417,6 +590,51 @@ async fn google_hent(app: AppHandle, mal: Option<String>) -> Result<Option<googl
     Ok(Some(nyeste))
 }
 
+/// Forhåndsvisninger lages bare for filer appen har fått lov til å vise, og lagres i appens mellomlager
+/// så de ikke må lages på nytt neste gang.
+fn miniatyr(app: &AppHandle, sti: &Path) -> Result<Vec<u8>, String> {
+    use std::hash::{Hash, Hasher};
+    if !app.asset_protocol_scope().is_allowed(sti) {
+        return Err("ikke tillatt".into());
+    }
+    let meta = std::fs::metadata(sti).map_err(|e| e.to_string())?;
+    let mut h = std::hash::DefaultHasher::new();
+    (sti, meta.len(), meta.modified().ok()).hash(&mut h);
+    let lager = app.path().app_cache_dir().ok().map(|d| d.join("miniatyrer").join(format!("{:016x}.jpg", h.finish())));
+    if let Some(data) = lager.as_ref().and_then(|l| std::fs::read(l).ok()) {
+        return Ok(data);
+    }
+    let data = {
+        // Høyst fire bilder pakkes ut samtidig, ellers kan en lang liste fylle minnet.
+        let _plass = Plasser::ta();
+        miniatyr::lag(sti).map_err(|e| format!("{e:#}"))?
+    };
+    if let Some(l) = lager {
+        let _ = std::fs::create_dir_all(l.parent().unwrap());
+        let _ = std::fs::write(l, &data);
+    }
+    Ok(data)
+}
+
+struct Plasser;
+
+static LEDIGE: (Mutex<usize>, std::sync::Condvar) = (Mutex::new(4), std::sync::Condvar::new());
+
+impl Plasser {
+    fn ta() -> Self {
+        let mut ledige = LEDIGE.1.wait_while(LEDIGE.0.lock().unwrap(), |n| *n == 0).unwrap();
+        *ledige -= 1;
+        Plasser
+    }
+}
+
+impl Drop for Plasser {
+    fn drop(&mut self) {
+        *LEDIGE.0.lock().unwrap() += 1;
+        LEDIGE.1.notify_one();
+    }
+}
+
 async fn pause(d: std::time::Duration) {
     let _ = tauri::async_runtime::spawn_blocking(move || std::thread::sleep(d)).await;
 }
@@ -429,6 +647,22 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(Tilstand::default())
+        // mini://<sti> gir en liten forhåndsvisning av bildet i stedet for hele originalen.
+        .register_asynchronous_uri_scheme_protocol("mini", |ctx, foresporsel, svar| {
+            let app = ctx.app_handle().clone();
+            let kodet = foresporsel.uri().path().trim_start_matches('/').to_string();
+            tauri::async_runtime::spawn_blocking(move || {
+                let sti = PathBuf::from(percent_encoding::percent_decode_str(&kodet).decode_utf8_lossy().into_owned());
+                let respons = match miniatyr(&app, &sti) {
+                    Ok(data) => tauri::http::Response::builder()
+                        .header("Content-Type", "image/jpeg")
+                        .header("Cache-Control", "max-age=31536000")
+                        .body(data),
+                    Err(e) => tauri::http::Response::builder().status(404).body(e.into_bytes()),
+                };
+                svar.respond(respons.unwrap());
+            });
+        })
         .invoke_handler(tauri::generate_handler![
             skann,
             sett_original,

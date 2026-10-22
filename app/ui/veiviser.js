@@ -60,7 +60,10 @@ async function oppdaterGoogle() {
   $("vvNedlastet").textContent = filer.length
     ? `CloudJumper har tatt imot ${filer.length} ${filer.length === 1 ? "fil" : "filer"} fra Google.`
     : "";
-  $("vvGoogleSorter").disabled = !filer.length;
+  if (underveis.size) {
+    $("vvNedlastet").textContent += ` Tar imot ${underveis.size === 1 ? "én fil" : underveis.size + " filer"} til nå. Vent til de er ferdige før du sorterer.`;
+  }
+  $("vvGoogleSorter").disabled = !filer.length || underveis.size > 0;
 }
 
 $("vvBestill").addEventListener("click", () =>
@@ -88,17 +91,20 @@ $("vvGmail").addEventListener("click", () => travel($("vvGmail"), "Sjekker e-pos
   }
 }));
 
+// Filene Google-vinduet holder på å laste ned akkurat nå.
+const underveis = new Set();
+
 listen("google-nedlasting", ({ payload }) => {
   if (!payload.ferdig) {
-    $("vvNedlastet").textContent = "Tar imot en fil fra Google …";
-    return;
+    underveis.add(payload.fil);
+  } else {
+    underveis.delete(payload.fil);
+    if (payload.ok) lagre("googleFiler", [...new Set([...hent("googleFiler", []), payload.fil])]);
   }
-  if (!payload.ok) {
-    $("vvNedlastet").textContent = "En nedlasting stoppet. Trykk «Hent bildene fra Google» og «Last ned» igjen.";
-    return;
-  }
-  lagre("googleFiler", [...new Set([...hent("googleFiler", []), payload.fil])]);
   oppdaterGoogle();
+  if (!payload.ok) {
+    $("vvNedlastet").textContent = "En nedlasting stoppet. Trykk «Hent bildene fra Google» og «Last ned alle» igjen.";
+  }
 });
 
 $("vvGoogleSorter").addEventListener("click", async () => {
