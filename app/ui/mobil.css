@@ -18,6 +18,8 @@
 .mobil .kort { width: calc(50% - 14px); }
 /* Gmail-sjekken og PC-hjelpen hører ikke hjemme på telefonen ennå. */
 .mobil #vvGmail { display: none !important; }
+/* «Koble mobilen til PC-en» gir ingen mening når appen allerede kjører på mobilen. */
+.mobil #veiviser [data-gaa="telefon"] { display: none !important; }
 
 /* Felles for mappevelgeren og tilgangssiden: dekker hele skjermen over alt annet. */
 .mobil-velger, .mobil-tilgang {
