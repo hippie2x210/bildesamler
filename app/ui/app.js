@@ -57,6 +57,17 @@ $("leggTilKilde").addEventListener("click", async () => {
   settKilder([...new Set([...kilder(), ...nye])]);
 });
 
+$("leggTilTakeout").addEventListener("click", async () => {
+  const valgt = await open({
+    multiple: true,
+    title: "Velg Takeout-zip-filer fra Google Foto",
+    filters: [{ name: "Google Takeout", extensions: ["zip"] }],
+  });
+  if (!valgt) return;
+  const nye = Array.isArray(valgt) ? valgt : [valgt];
+  settKilder([...new Set([...kilder(), ...nye])]);
+});
+
 $("fjernKilde").addEventListener("click", () => {
   const valgt = new Set([...$("kilder").selectedOptions].map((o) => o.value));
   settKilder(kilder().filter((k) => !valgt.has(k)));
@@ -75,13 +86,13 @@ $("velgMal").addEventListener("click", async () => {
 listen("fremdrift", ({ payload }) => {
   const { fase, ferdig, total } = payload;
   $("fremdrift").hidden = false;
-  const tekst = fase === "skanner" ? "Leser filer" : "Kopierer";
+  const tekst = { skanner: "Leser filer", "pakker ut": "Pakker ut Google Takeout" }[fase] ?? "Kopierer";
   $("fremdriftTekst").textContent = `${tekst}: ${ferdig} av ${total}`;
   $("fremdriftLinje").style.width = total ? `${(100 * ferdig) / total}%` : "0";
 });
 
 function opptatt(ja) {
-  for (const id of ["skann", "kopier", "angre", "leggTilKilde", "fjernKilde", "velgMal"]) {
+  for (const id of ["skann", "kopier", "angre", "leggTilKilde", "leggTilTakeout", "fjernKilde", "velgMal"]) {
     $(id).disabled = ja || (id === "kopier" && !oversikt);
   }
 }

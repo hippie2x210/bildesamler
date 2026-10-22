@@ -1,6 +1,6 @@
 //! Skallet rundt kjernen: kommandoer grensesnittet kan kalle, og fremdrift tilbake.
 
-use bildesamler_kjerne::{lag_plan, modell::{Datokilde, Tillit}, plan::Rolle, utfor, Plan};
+use bildesamler_kjerne::{lag_plan, modell::{Datokilde, Tillit}, plan::Rolle, takeout, utfor, Plan};
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -70,6 +70,7 @@ fn fil_visning(plan: &Plan, i: usize) -> FilVisning {
             Datokilde::Exif => "EXIF",
             Datokilde::Video => "video",
             Datokilde::Filnavn => "filnavn",
+            Datokilde::Takeout => "Google Foto",
             Datokilde::Ingen => "ingen",
         }
         .into(),
@@ -145,25 +146,35 @@ async fn skann(app: AppHandle, tilstand: State<'_, Tilstand>, kilder: Vec<String
     let kilder: Vec<PathBuf> = kilder.into_iter().map(PathBuf::from).collect();
     let mal = PathBuf::from(mal);
     for k in &kilder {
-        if !k.is_dir() {
+        let er_zip = k.is_file() && takeout::er_zip(k);
+        if !k.is_dir() && !er_zip {
             return Err(format!("Finner ikke mappen {}", k.display()));
         }
-        // Grensesnittet får vise forhåndsbilder fra mappene brukeren selv har valgt.
-        let _ = app.asset_protocol_scope().allow_directory(k, true);
     }
 
     let app2 = app.clone();
-    let plan = tauri::async_runtime::spawn_blocking(move || {
-        lag_plan(&kilder, &mal, &|ferdig, total| {
+    let (plan, takeout_varsler, kilder) = tauri::async_runtime::spawn_blocking(move || {
+        // Takeout-zip-er pakkes ut i samlingens egen mappe først. Zip-filene røres ikke.
+        let (kilder, varsler) = takeout::forbered_kilder(&kilder, &mal, &|ferdig, total| {
+            let _ = app2.emit("fremdrift", Fremdrift { fase: "pakker ut", ferdig, total });
+        });
+        let plan = lag_plan(&kilder, &mal, &|ferdig, total| {
             if ferdig % 25 == 0 || ferdig == total {
                 let _ = app2.emit("fremdrift", Fremdrift { fase: "skanner", ferdig, total });
             }
-        })
+        });
+        (plan, varsler, kilder)
     })
     .await
     .map_err(|e| e.to_string())?;
 
-    let o = oversikt(&plan);
+    // Grensesnittet får vise forhåndsbilder fra mappene brukeren selv har valgt.
+    for k in &kilder {
+        let _ = app.asset_protocol_scope().allow_directory(k, true);
+    }
+
+    let mut o = oversikt(&plan);
+    o.varsler.extend(takeout_varsler);
     *tilstand.0.lock().unwrap() = Some(plan);
     Ok(o)
 }

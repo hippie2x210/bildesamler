@@ -6,6 +6,7 @@ pub mod likhet;
 pub mod metadata;
 pub mod modell;
 pub mod plan;
+pub mod takeout;
 pub mod utfor;
 
 use rayon::prelude::*;

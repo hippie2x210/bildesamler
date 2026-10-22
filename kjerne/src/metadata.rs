@@ -54,6 +54,7 @@ pub fn les(sti: &Path) -> Result<Fil> {
         har_gps: false,
         metadata_dato: None,
         filnavn_dato: sti.file_name().and_then(|n| dato::fra_filnavn(&n.to_string_lossy())),
+        takeout_dato: crate::takeout::sidecar_dato(sti),
         fildato,
         dato: None,
         datokilde: Datokilde::Ingen,
