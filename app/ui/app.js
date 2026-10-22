@@ -1,7 +1,7 @@
 // Grensesnittet for CloudJumper. Alt arbeid skjer i Rust-kjernen; her vises bare valg og resultat.
 const { invoke, convertFileSrc } = window.__TAURI__.core;
 const { listen } = window.__TAURI__.event;
-const { open } = window.__TAURI__.dialog;
+const { open, ask } = window.__TAURI__.dialog;
 
 const $ = (id) => document.getElementById(id);
 const SIDE = 20;
@@ -108,9 +108,10 @@ $("skann").addEventListener("click", async () => {
 
 $("kopier").addEventListener("click", async () => {
   const r = oversikt.rapport;
-  const ok = confirm(
+  const ok = await ask(
     `Kopiere ${r.filer} filer til ${$("mal").value}?\n\n` +
-      `${r.duplikater} duplikater legges i «Duplikater». Originalene blir liggende der de er.`
+      `${r.duplikater} duplikater legges i «Duplikater». Originalene blir liggende der de er.`,
+    { title: "Kopier til samlingen", kind: "info", okLabel: "Kopier", cancelLabel: "Avbryt" }
   );
   if (!ok) return;
   opptatt(true);
@@ -134,7 +135,13 @@ $("kopier").addEventListener("click", async () => {
 $("angre").addEventListener("click", async () => {
   const mal = $("mal").value;
   if (!mal) return visFeil("Velg målmappen du vil angre i.");
-  if (!confirm("Angre siste kopiering? Kopiene flyttes til mappen «_Angret» i samlingen. Ingenting slettes.")) return;
+  const ok = await ask("Angre siste kopiering? Kopiene flyttes til mappen «_Angret» i samlingen. Ingenting slettes.", {
+    title: "Angre",
+    kind: "warning",
+    okLabel: "Angre",
+    cancelLabel: "Avbryt",
+  });
+  if (!ok) return;
   try {
     const antall = await invoke("angre", { mal });
     status(`${antall} filer flyttet til _Angret`);

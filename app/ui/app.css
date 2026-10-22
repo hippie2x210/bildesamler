@@ -29,6 +29,12 @@ html, body {
 
 fieldset { margin: 0; }
 
+/* XP.css 0.2.6 mangler stil for deaktiverte knapper, så teksten forsvant på Windows. */
+button:disabled {
+  color: #a19f95;
+  text-shadow: 1px 1px 0 #fff;
+}
+
 #kilder { width: 100%; min-height: 64px; }
 
 .knapper, .handling, .rad {

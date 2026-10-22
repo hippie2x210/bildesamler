@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "Det hovedvinduet får lov til",
   "windows": ["main"],
-  "permissions": ["core:default", "dialog:allow-open"]
+  "permissions": ["core:default", "dialog:allow-open", "dialog:allow-ask"]
 }
