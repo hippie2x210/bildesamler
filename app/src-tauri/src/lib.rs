@@ -1,6 +1,7 @@
 //! Skallet rundt kjernen: kommandoer grensesnittet kan kalle, og fremdrift tilbake.
 
 use bildesamler_kjerne::{lag_plan, modell::{Datokilde, Tillit}, plan::Rolle, takeout, utfor, Plan};
+use cloudjumper_sky::google;
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -213,6 +214,89 @@ fn apne_mappe(sti: String) -> Result<(), String> {
     tauri_plugin_opener::open_path(sti, None::<&str>).map_err(|e| e.to_string())
 }
 
+// --- Google Foto via Takeout og Gmail ---
+
+/// Klienten fra Google Cloud-prosjektet. Bygget inn ved kompilering (GitHub-hemmelighet), ellers lest fra
+/// `google-klient.json` i appens innstillingsmappe eller ved siden av programmet.
+fn google_klient(app: &AppHandle) -> Result<google::Klient, String> {
+    if let Some(innebygd) = option_env!("CLOUDJUMPER_GOOGLE_KLIENT").filter(|s| !s.trim().is_empty()) {
+        return google::Klient::fra_json(innebygd).map_err(|e| format!("{e:#}"));
+    }
+    let mut steder = Vec::new();
+    if let Ok(d) = app.path().app_config_dir() {
+        steder.push(d.join("google-klient.json"));
+    }
+    if let Some(d) = std::env::current_exe().ok().and_then(|e| e.parent().map(Path::to_path_buf)) {
+        steder.push(d.join("google-klient.json"));
+    }
+    for sti in &steder {
+        if let Ok(tekst) = std::fs::read_to_string(sti) {
+            return google::Klient::fra_json(&tekst).map_err(|e| format!("{e:#}"));
+        }
+    }
+    Err(format!(
+        "Google-innlogging er ikke satt opp i denne versjonen. Legg google-klient.json i {}",
+        steder.first().map(|p| p.display().to_string()).unwrap_or_default()
+    ))
+}
+
+#[derive(Serialize)]
+struct GoogleStatus {
+    satt_opp: bool,
+    innlogget: bool,
+    nedlastinger: Option<String>,
+}
+
+#[tauri::command]
+fn google_status(app: AppHandle) -> GoogleStatus {
+    GoogleStatus {
+        satt_opp: google_klient(&app).is_ok(),
+        innlogget: google::er_innlogget(),
+        nedlastinger: app.path().download_dir().ok().map(|p| p.to_string_lossy().into_owned()),
+    }
+}
+
+#[tauri::command]
+fn google_bestill() -> Result<(), String> {
+    tauri_plugin_opener::open_url(google::TAKEOUT_FOTO, None::<&str>).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn google_logg_inn(app: AppHandle) -> Result<String, String> {
+    let klient = google_klient(&app)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        google::logg_inn(&klient, &|adresse| {
+            tauri_plugin_opener::open_url(adresse, None::<&str>).map_err(|e| anyhow::anyhow!(e.to_string()))
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+    .map_err(|e| format!("{e:#}"))
+}
+
+#[tauri::command]
+fn google_logg_ut() -> Result<(), String> {
+    google::logg_ut().map_err(|e| format!("{e:#}"))
+}
+
+/// Finner den nyeste Takeout-e-posten og åpner nedlastingslenkene i nettleseren,
+/// der brukeren allerede er logget inn hos Google. Zip-filene havner i Nedlastinger.
+#[tauri::command]
+async fn google_hent(app: AppHandle) -> Result<Option<google::TakeoutPost>, String> {
+    let klient = google_klient(&app)?;
+    let poster = tauri::async_runtime::spawn_blocking(move || google::finn_takeout(&klient))
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|e| format!("{e:#}"))?;
+    let Some(nyeste) = poster.into_iter().next() else { return Ok(None) };
+    for lenke in &nyeste.lenker {
+        tauri_plugin_opener::open_url(lenke, None::<&str>).map_err(|e| e.to_string())?;
+        // Litt pause, så nettleseren ikke blokkerer mange nedlastinger på en gang.
+        std::thread::sleep(std::time::Duration::from_millis(800));
+    }
+    Ok(Some(nyeste))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -221,7 +305,18 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(Tilstand::default())
-        .invoke_handler(tauri::generate_handler![skann, sett_original, kopier, angre, apne_mappe])
+        .invoke_handler(tauri::generate_handler![
+            skann,
+            sett_original,
+            kopier,
+            angre,
+            apne_mappe,
+            google_status,
+            google_bestill,
+            google_logg_inn,
+            google_logg_ut,
+            google_hent
+        ])
         .setup(|app| {
             hent_fram(app.handle());
             Ok(())
