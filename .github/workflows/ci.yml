@@ -67,9 +67,9 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
-      - uses: android-actions/setup-android@v3
+      # Android SDK finnes allerede på ubuntu-runneren (ANDROID_HOME). Bare NDK-en må hentes.
       - name: Installer Android NDK
-        run: sdkmanager "ndk;${NDK_VERSJON}"
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;${NDK_VERSJON}" > /dev/null
       - uses: actions/setup-node@v4
         with:
           node-version: 22
