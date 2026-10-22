@@ -152,38 +152,55 @@ impl Enhet {
     }
 }
 
+/// Teller bildene og videoene på telefonen uten å kopiere noe: (antall, bytes).
+pub fn tell(telefon: &str) -> Result<(usize, u64)> {
+    com();
+    unsafe {
+        let enhet = Enhet::apne(telefon)?;
+        let mut feil = Vec::new();
+        let filer = finn_filer(&enhet, Path::new(""), &mut feil)?;
+        Ok((filer.len(), filer.iter().filter_map(|(o, _)| o.storrelse).sum()))
+    }
+}
+
+unsafe fn finn_filer(enhet: &Enhet, mal: &Path, feil: &mut Vec<String>) -> Result<Vec<(Objekt, std::path::PathBuf)>> {
+    // Lagringsområdene ligger under DEVICE.
+    let mut filer = Vec::new();
+    let mut ko: Vec<(String, Vec<String>, std::path::PathBuf)> = Vec::new();
+    for lager in enhet.barn("DEVICE")? {
+        ko.push((lager.id, Vec::new(), mal.join(trygt(&lager.navn))));
+    }
+    while let Some((id, sti, mappe)) = ko.pop() {
+        let barn = match enhet.barn(&id) {
+            Ok(b) => b,
+            Err(e) => {
+                feil.push(format!("{}: {e}", mappe.display()));
+                continue;
+            }
+        };
+        for o in barn {
+            if o.mappe {
+                let mut ny = sti.clone();
+                ny.push(o.navn.to_lowercase());
+                if interessant(&ny) {
+                    ko.push((o.id, ny, mappe.join(trygt(&o.navn))));
+                }
+            } else if !sti.is_empty() && er_media(&o.navn) {
+                filer.push((o, mappe.clone()));
+            }
+        }
+    }
+    Ok(filer)
+}
+
 /// Kopierer bildene og videoene fra telefonen til `mal`. Returnerer hvor mange som ble hentet.
 pub fn hent(telefon: &str, mal: &Path, fremdrift: &dyn Fn(usize, usize)) -> Result<Henting> {
     com();
     let mut h = Henting { mappe: mal.to_path_buf(), ..Default::default() };
     unsafe {
         let enhet = Enhet::apne(telefon)?;
-        // Først en liste over alt, så fremdriften blir riktig. Lagringsområdene ligger under DEVICE.
-        let mut filer = Vec::new();
-        let mut ko: Vec<(String, Vec<String>, std::path::PathBuf)> = Vec::new();
-        for lager in enhet.barn("DEVICE")? {
-            ko.push((lager.id, Vec::new(), mal.join(trygt(&lager.navn))));
-        }
-        while let Some((id, sti, mappe)) = ko.pop() {
-            let barn = match enhet.barn(&id) {
-                Ok(b) => b,
-                Err(e) => {
-                    h.feil.push(format!("{}: {e}", mappe.display()));
-                    continue;
-                }
-            };
-            for o in barn {
-                if o.mappe {
-                    let mut ny = sti.clone();
-                    ny.push(o.navn.to_lowercase());
-                    if interessant(&ny) {
-                        ko.push((o.id, ny, mappe.join(trygt(&o.navn))));
-                    }
-                } else if !sti.is_empty() && er_media(&o.navn) {
-                    filer.push((o, mappe.clone()));
-                }
-            }
-        }
+        // Først en liste over alt, så fremdriften blir riktig.
+        let filer = finn_filer(&enhet, mal, &mut h.feil)?;
         let total = filer.len();
         for (n, (o, mappe)) in filer.into_iter().enumerate() {
             fremdrift(n, total);

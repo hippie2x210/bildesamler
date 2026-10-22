@@ -697,6 +697,11 @@ async fn pause(d: std::time::Duration) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Feilsøking uten vindu: `cloudjumper.exe --telefontest` skriver hva den finner på telefonen til en tekstfil.
+    if std::env::args().any(|a| a == "--telefontest") {
+        telefontest();
+        return;
+    }
     tauri::Builder::default()
         // Starter man appen en gang til, hentes vinduet som allerede er åpent fram.
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| hent_fram(app)))
@@ -750,4 +755,29 @@ fn hent_fram(app: &AppHandle) {
         let _ = vindu.show();
         let _ = vindu.set_focus();
     }
+}
+
+fn telefontest() {
+    use std::fmt::Write;
+    let mut ut = String::new();
+    match cloudjumper_telefon::finn() {
+        Ok(liste) => {
+            let _ = writeln!(ut, "Fant {} enheter", liste.len());
+            for t in liste {
+                let start = std::time::Instant::now();
+                match cloudjumper_telefon::tell(&t.id) {
+                    Ok((n, b)) => {
+                        let _ = writeln!(ut, "{}: {n} bilder/videoer, {:.1} GB, {:.1} s", t.navn, b as f64 / 1e9, start.elapsed().as_secs_f64());
+                    }
+                    Err(e) => {
+                        let _ = writeln!(ut, "{}: feil: {e:#}", t.navn);
+                    }
+                }
+            }
+        }
+        Err(e) => {
+            let _ = writeln!(ut, "Feil: {e:#}");
+        }
+    }
+    let _ = std::fs::write(std::env::temp_dir().join("cloudjumper-telefontest.txt"), ut);
 }
