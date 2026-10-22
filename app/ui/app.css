@@ -130,6 +130,7 @@ table.tall td:last-child { text-align: right; font-weight: bold; }
 .veiviser p { margin: 6px 0 12px; line-height: 1.45; max-width: 46em; }
 .veiviser button { font-size: 18px; font-family: Tahoma, "Segoe UI", sans-serif; }
 .store-valg { display: flex; gap: 18px; flex-wrap: wrap; margin: 12px 0; }
+.stor-liste { font-size: 18px; line-height: 1.6; margin: 8px 0 16px; }
 .veiviser button.stor {
   width: 340px; min-height: 140px; padding: 16px; font-size: 24px; text-align: left;
   display: flex; flex-direction: column; gap: 8px; justify-content: center;

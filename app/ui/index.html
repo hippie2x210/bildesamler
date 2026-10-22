@@ -17,6 +17,7 @@
         <h1>Hei! Hvor er bildene dine?</h1>
         <div class="store-valg">
           <button class="stor" data-gaa="google">📷 Google Foto<small>Bildene du har tatt med mobilen og lagret hos Google</small></button>
+          <button class="stor" data-gaa="telefon">📱 Mobilen<small>Koble telefonen til PC-en med ladekabelen</small></button>
           <button class="stor" data-gaa="mappe">🗂️ En mappe eller minnepinne<small>Bilder som allerede ligger på PC-en eller en disk</small></button>
         </div>
         <p class="trygt">CloudJumper lager kopier. Originalbildene blir alltid liggende der de er, og ingenting slettes.</p>
@@ -42,6 +43,20 @@
           <h2>3. Sorter bildene</h2>
           <button class="stor-knapp" id="vvGoogleSorter" disabled>Sorter bildene jeg har hentet</button>
         </div>
+        <button class="tilbake" data-gaa="start">‹ Tilbake</button>
+      </section>
+
+      <section data-steg="telefon" hidden>
+        <h1>Bilder fra mobilen</h1>
+        <ol class="stor-liste">
+          <li>Koble telefonen til PC-en med ladekabelen.</li>
+          <li>Lås opp telefonen.</li>
+          <li><b>Android:</b> trykk på varselet om USB og velg «Filoverføring».<br><b>iPhone:</b> trykk «Stol på» og skriv koden din.</li>
+        </ol>
+        <button class="stor-knapp hoved-knapp" id="vvFinnTelefon">Finn telefonen</button>
+        <div class="store-valg" id="vvTelefoner"></div>
+        <p class="liten" id="vvTelefonTekst"></p>
+        <p class="trygt">CloudJumper bare leser fra telefonen. Ingenting på telefonen endres eller slettes.</p>
         <button class="tilbake" data-gaa="start">‹ Tilbake</button>
       </section>
 

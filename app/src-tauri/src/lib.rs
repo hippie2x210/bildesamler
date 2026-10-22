@@ -204,6 +204,34 @@ async fn kopier(app: AppHandle, tilstand: State<'_, Tilstand>) -> Result<utfor::
     .map_err(|e| format!("{e:#}"))
 }
 
+/// Telefoner koblet til med kabel.
+#[tauri::command]
+async fn telefoner() -> Result<Vec<cloudjumper_telefon::Telefon>, String> {
+    tauri::async_runtime::spawn_blocking(cloudjumper_telefon::finn)
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|e| format!("{e:#}"))
+}
+
+/// Kopierer bildene fra telefonen til `<samling>/.cloudjumper/mobil/<telefon>`, som så kan skannes.
+/// Telefonen åpnes bare for lesing.
+#[tauri::command]
+async fn telefon_hent(app: AppHandle, id: String, navn: String, mal: String) -> Result<cloudjumper_telefon::Henting, String> {
+    if mal.trim().is_empty() {
+        return Err("Velg hvor bildene skal samles.".into());
+    }
+    utfor::flytt_gammel_mappe(Path::new(&mal));
+    let mappe = PathBuf::from(&mal).join(utfor::LOGGMAPPE).join("mobil").join(cloudjumper_telefon::trygt(&navn));
+    tauri::async_runtime::spawn_blocking(move || {
+        cloudjumper_telefon::hent(&id, &mappe, &|ferdig, total| {
+            let _ = app.emit("fremdrift", Fremdrift { fase: "telefon", ferdig, total });
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+    .map_err(|e| format!("{e:#}"))
+}
+
 #[tauri::command]
 async fn angre(mal: String) -> Result<usize, String> {
     // Kan flytte mange filer, så det skjer utenfor hovedtråden og grensesnittet ikke fryser.
@@ -696,6 +724,8 @@ pub fn run() {
             sett_original,
             kopier,
             angre,
+            telefoner,
+            telefon_hent,
             apne_mappe,
             google_status,
             google_bestill,
