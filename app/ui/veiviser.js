@@ -8,6 +8,9 @@ const vv = {
   status: null,
 };
 
+// Telefonen (se mobil.js) har noen andre tekster og ingen egen Google-nedlasting.
+const mobil = !!window.CloudJumperAndroid;
+
 function visSteg(navn) {
   for (const s of document.querySelectorAll("#veiviser [data-steg]")) s.hidden = s.dataset.steg !== navn;
   $("vvFeil").hidden = true;
@@ -63,7 +66,8 @@ async function oppdaterGoogle() {
   if (underveis.size) {
     $("vvNedlastet").textContent += ` Tar imot ${underveis.size === 1 ? "én fil" : underveis.size + " filer"} til nå. Vent til de er ferdige før du sorterer.`;
   }
-  $("vvGoogleSorter").disabled = !filer.length || underveis.size > 0;
+  // På telefonen lastes filene ned i nettleseren, så CloudJumper ser ikke når de er ferdige.
+  $("vvGoogleSorter").disabled = !mobil && (!filer.length || underveis.size > 0);
   // Bare steget brukeren er på nå er framhevet, så det er lett å se hva som er neste.
   const na = filer.length && !underveis.size ? 3 : bestilt || underveis.size ? 2 : 1;
   for (const t of document.querySelectorAll("#veiviser [data-trinn]")) {
@@ -216,7 +220,9 @@ $("vvKopier").addEventListener("click", async () => {
   if (!ok) return;
   visSteg("jobber");
   $("vvJobberTittel").textContent = "Kopierer …";
-  $("vvJobberTekst").textContent = "Du kan gå fra PC-en. CloudJumper sier fra når den er ferdig.";
+  $("vvJobberTekst").textContent = mobil
+    ? "La CloudJumper være åpen til den er ferdig. Skjermen holdes på så lenge."
+    : "Du kan gå fra PC-en. CloudJumper sier fra når den er ferdig.";
   try {
     const res = await invoke("kopier");
     const deler = [`${antall(res.kopiert, "bilde", "bilder")} er kopiert til samlingen.`];

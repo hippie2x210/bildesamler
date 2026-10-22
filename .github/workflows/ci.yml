@@ -45,3 +45,75 @@ jobs:
           name: CloudJumper-Windows
           path: target/release/bundle/nsis/*.exe
           if-no-files-found: error
+
+  android:
+    name: Android-app (APK)
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      NDK_VERSJON: 27.2.12479018
+      HAR_NOKKEL: ${{ secrets.ANDROID_KEYSTORE != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: android
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: android-actions/setup-android@v3
+      - name: Installer Android NDK
+        run: sdkmanager "ndk;${NDK_VERSJON}"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - name: Installer Tauri CLI
+        working-directory: app
+        run: npm ci
+      # Samme nøkkel hver gang, ellers nekter telefonen å oppdatere appen. Uten hemmeligheten signeres
+      # APK-en med en tilfeldig testnøkkel: den kan installeres, men ikke oppdatere en tidligere versjon.
+      - name: Signeringsnøkkel
+        env:
+          NOKKEL: ${{ secrets.ANDROID_KEYSTORE }}
+          PASSORD: ${{ secrets.ANDROID_KEYSTORE_PASSORD }}
+        if: env.HAR_NOKKEL == 'true'
+        working-directory: app/src-tauri/gen/android
+        run: |
+          echo "$NOKKEL" | base64 -d > "$RUNNER_TEMP/cloudjumper.jks"
+          {
+            echo "storeFile=$RUNNER_TEMP/cloudjumper.jks"
+            echo "storePassword=$PASSORD"
+            echo "keyAlias=cloudjumper"
+            echo "keyPassword=$PASSORD"
+          } > keystore.properties
+      - name: Bygg APK
+        working-directory: app
+        env:
+          NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/${{ env.NDK_VERSJON }}
+        run: |
+          npx tauri android build --apk --target aarch64 --target armv7 \
+            --config "{\"bundle\":{\"android\":{\"versionCode\":$((1000 + GITHUB_RUN_NUMBER))}}}"
+          cp src-tauri/gen/android/app/build/outputs/apk/universal/release/*.apk "$GITHUB_WORKSPACE/CloudJumper.apk"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CloudJumper-Android
+          path: CloudJumper.apk
+          if-no-files-found: error
+      # Fast adresse å laste ned fra på telefonen: Releases → «CloudJumper for Android (siste testbygg)».
+      - name: Legg ut som testversjon
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete android-siste --yes --cleanup-tag -R "$GITHUB_REPOSITORY" || true
+          gh release create android-siste CloudJumper.apk -R "$GITHUB_REPOSITORY" --prerelease --target "$GITHUB_SHA" \
+            --title "CloudJumper for Android (siste testbygg)" \
+            --notes "Bygget fra ${GITHUB_REF_NAME} (${GITHUB_SHA::7}), bygg nr. ${GITHUB_RUN_NUMBER}. Last ned CloudJumper.apk på telefonen og åpne den. Se docs/android.md."
