@@ -1,0 +1,56 @@
+fil,scenario,gruppe,forventet_dato,forventet_mål,beholdes
+kamera/IMG_1000.JPG,original,1,2012-01-01T10:15:00,Bilder/2012/01,ja
+kamera/IMG_1001.JPG,original,2,2013-06-02T11:15:00,Bilder/2013/06,ja
+kamera/IMG_1002.JPG,original,3,2014-11-03T12:15:00,Bilder/2014/11,ja
+kamera/IMG_1003.JPG,original,4,2015-04-04T13:15:00,Bilder/2015/04,ja
+kamera/IMG_1004.JPG,original,5,2016-09-05T14:15:00,Bilder/2016/09,ja
+kamera/IMG_1005.JPG,original,6,2017-02-06T15:15:00,Bilder/2017/02,ja
+kamera/IMG_1006.JPG,original,7,2018-07-07T16:15:00,Bilder/2018/07,ja
+kamera/IMG_1007.JPG,original,8,2019-12-08T17:15:00,Bilder/2019/12,ja
+kamera/IMG_1008.JPG,original,9,2020-05-09T18:15:00,Bilder/2020/05,ja
+kamera/IMG_1009.JPG,original,10,2021-10-10T10:15:00,Bilder/2021/10,ja
+kamera/IMG_1010.JPG,original,11,2022-03-11T11:15:00,Bilder/2022/03,ja
+kamera/IMG_1011.JPG,original,12,2023-08-12T12:15:00,Bilder/2023/08,ja
+kamera/IMG_1012.JPG,original,13,2012-01-13T13:15:00,Bilder/2012/01,ja
+kamera/IMG_1013.JPG,original,14,2013-06-14T14:15:00,Bilder/2013/06,ja
+kamera/IMG_1014.JPG,original,15,2014-11-15T15:15:00,Bilder/2014/11,ja
+kamera/IMG_1015.JPG,original,16,2015-04-16T16:15:00,Bilder/2015/04,ja
+kamera/IMG_1016.JPG,original,17,2016-09-17T17:15:00,Bilder/2016/09,ja
+kamera/IMG_1017.JPG,original,18,2017-02-18T18:15:00,Bilder/2017/02,ja
+kamera/IMG_1018.JPG,original,19,2018-07-19T10:15:00,Bilder/2018/07,ja
+kamera/IMG_1019.JPG,original,20,2019-12-20T11:15:00,Bilder/2019/12,ja
+onedrive_kopi/IMG_1000 (1).JPG,eksakt kopi,1,2012-01-01T10:15:00,Duplikater,nei
+onedrive_kopi/IMG_1001 (1).JPG,eksakt kopi,2,2013-06-02T11:15:00,Duplikater,nei
+onedrive_kopi/IMG_1002 (1).JPG,eksakt kopi,3,2014-11-03T12:15:00,Duplikater,nei
+onedrive_kopi/IMG_1003 (1).JPG,eksakt kopi,4,2015-04-04T13:15:00,Duplikater,nei
+onedrive_kopi/IMG_1004 (1).JPG,eksakt kopi,5,2016-09-05T14:15:00,Duplikater,nei
+whatsapp/IMG-20170206-WA0005.jpg,"whatsapp-kopi (dårligere, uten EXIF)",6,2017-02-06T15:15:00,Duplikater,nei
+whatsapp/IMG-20180707-WA0006.jpg,"whatsapp-kopi (dårligere, uten EXIF)",7,2018-07-07T16:15:00,Duplikater,nei
+whatsapp/IMG-20191208-WA0007.jpg,"whatsapp-kopi (dårligere, uten EXIF)",8,2019-12-08T17:15:00,Duplikater,nei
+whatsapp/IMG-20200509-WA0008.jpg,"whatsapp-kopi (dårligere, uten EXIF)",9,2020-05-09T18:15:00,Duplikater,nei
+whatsapp/IMG-20211010-WA0009.jpg,"whatsapp-kopi (dårligere, uten EXIF)",10,2021-10-10T10:15:00,Duplikater,nei
+google_foto/ukjent_10.jpg,full kvalitet men uten EXIF (original med EXIF vinner),11,2022-03-11T11:15:00,Duplikater,nei
+google_foto/ukjent_11.jpg,full kvalitet men uten EXIF (original med EXIF vinner),12,2023-08-12T12:15:00,Duplikater,nei
+google_foto/ukjent_12.jpg,full kvalitet men uten EXIF (original med EXIF vinner),13,2012-01-13T13:15:00,Duplikater,nei
+mobil/IMG_20200210_143005.jpg,dato bare i filnavn,21,2020-02-10T14:30:05,Bilder/2020/02,ja
+mobil/Screenshot_20210310-143005.png,dato bare i filnavn,22,2021-03-10T14:30:05,Bilder/2021/03,ja
+mobil/IMG_20220410_143005.jpg,dato bare i filnavn,23,2022-04-10T14:30:05,Bilder/2022/04,ja
+mobil/Screenshot_20230510-143005.png,dato bare i filnavn,24,2023-05-10T14:30:05,Bilder/2023/05,ja
+mobil/IMG_20240610_143005.jpg,dato bare i filnavn,25,2024-06-10T14:30:05,Bilder/2024/06,ja
+mobil/Screenshot_20200710-143005.png,dato bare i filnavn,26,2020-07-10T14:30:05,Bilder/2020/07,ja
+diverse/bilde1.jpg,ingen dato,27,,Uten dato,ja
+diverse/bilde2.jpg,ingen dato,28,,Uten dato,ja
+diverse/bilde3.jpg,ingen dato,29,,Uten dato,ja
+diverse/bilde4.jpg,ingen dato,30,,Uten dato,ja
+kamera/DSC_9000.JPG,falsk EXIF-dato (2000-01-01),31,,Uten dato,ja
+kamera/DSC_9001.JPG,falsk EXIF-dato (1970-01-01),32,,Uten dato,ja
+kamera/DSC_9002.JPG,falsk EXIF-dato (2031-05-05),33,,Uten dato,ja
+mobil/IMG_20150301_120000.jpg,EXIF og filnavn uenige (flagg),34,2018-08-12T09:00:00,Bilder/2018/08,ja
+kamera/BURST_1.JPG,serieopptak (ikke duplikat),serie-35-0,2022-06-23T21:10:00,Bilder/2022/06,ja
+kamera/BURST_2.JPG,serieopptak (ikke duplikat),serie-35-1,2022-06-23T21:10:01,Bilder/2022/06,ja
+kamera/BURST_3.JPG,serieopptak (ikke duplikat),serie-35-2,2022-06-23T21:10:02,Bilder/2022/06,ja
+kamera/IMG_1015_redigert.JPG,redigert versjon (beholdes),16-redigert,2015-04-16T16:15:00,Bilder/2015/04,ja
+familie/Julaften på hytta æøå.jpg,norske tegn i filnavn,36,2016-12-24T18:00:00,Bilder/2016/12,ja
+video/VID_20190704_130000.mp4,video,video-0,2019-07-04T13:00:00,Videoer/2019/07,ja
+video/VID_20230317_084500.mp4,video,video-1,2023-03-17T08:45:00,Videoer/2023/03,ja
+video/VID_20190704_130000 (kopi).mp4,"video, eksakt kopi",video-0,2019-07-04T13:00:00,Duplikater,nei
