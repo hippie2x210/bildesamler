@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="no">
+<head>
+  <meta charset="utf-8">
+  <title>CloudJumper</title>
+  <link rel="stylesheet" href="vendor/XP.css">
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <div class="window hoved">
+    <div class="title-bar">
+      <div class="title-bar-text">CloudJumper – samle og sortere bilder</div>
+    </div>
+    <div class="window-body">
+      <div class="oppsett">
+        <fieldset>
+          <legend>1. Hvor ligger bildene?</legend>
+          <select id="kilder" size="4" multiple></select>
+          <div class="knapper">
+            <button id="leggTilKilde">Legg til mappe…</button>
+            <button id="fjernKilde">Fjern valgt</button>
+          </div>
+        </fieldset>
+        <fieldset>
+          <legend>2. Hvor skal de samles?</legend>
+          <div class="rad">
+            <input id="mal" type="text" readonly placeholder="Velg en mappe på PC-en eller en ekstern disk">
+            <button id="velgMal">Bla gjennom…</button>
+          </div>
+          <p class="hint">Originalene blir liggende der de er. CloudJumper kopierer og sletter aldri noe.</p>
+        </fieldset>
+      </div>
+
+      <div class="handling">
+        <button id="skann" class="default">3. Skann (bare se, ingenting endres)</button>
+        <button id="kopier" disabled>4. Kopier til samlingen</button>
+        <button id="angre">Angre siste kopiering</button>
+        <button id="apne" disabled>Åpne samlingen</button>
+      </div>
+
+      <div id="fremdrift" class="fremdrift" hidden>
+        <div class="fremdrift-tekst" id="fremdriftTekst"></div>
+        <div class="linje"><div id="fremdriftLinje"></div></div>
+      </div>
+
+      <div id="varsler"></div>
+
+      <section id="resultat" hidden>
+        <menu role="tablist">
+          <button role="tab" aria-selected="true" data-fane="oversikt">Oversikt</button>
+          <button role="tab" data-fane="duplikater">Duplikater</button>
+          <button role="tab" data-fane="utenDato">Uten dato</button>
+          <button role="tab" data-fane="advarsler">Advarsler</button>
+        </menu>
+        <div class="fane-innhold" role="tabpanel">
+          <div>
+            <div data-panel="oversikt" id="oversikt"></div>
+            <div data-panel="duplikater" hidden>
+              <p class="hint">Den med hake beholdes som original. Klikk «Behold denne» for å velge en annen.</p>
+              <div id="duplikater"></div>
+              <button id="flereDuplikater" hidden>Vis flere</button>
+            </div>
+            <div data-panel="utenDato" hidden><div id="utenDato"></div></div>
+            <div data-panel="advarsler" hidden><div id="advarsler"></div></div>
+          </div>
+        </div>
+      </section>
+    </div>
+    <div class="status-bar">
+      <p class="status-bar-field" id="status">Klar</p>
+      <p class="status-bar-field">Versjon 0.1.0</p>
+    </div>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

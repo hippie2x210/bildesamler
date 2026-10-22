@@ -1,0 +1,47 @@
+name: Bygg og test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Test kjernen mot fasiten
+        run: cargo test -p bildesamler-kjerne --release
+
+  windows-installasjon:
+    name: Windows-installasjon
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - name: Installer Tauri CLI
+        working-directory: app
+        run: npm ci
+      - name: Bygg installasjonsfil
+        working-directory: app
+        run: npx tauri build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CloudJumper-Windows
+          path: target/release/bundle/nsis/*.exe
+          if-no-files-found: error

@@ -30,6 +30,7 @@ pub struct Handling {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Rapport {
     pub filer: usize,
+    /// Originaler med dato. Filer uten dato telles bare i `uten_dato`.
     pub bilder: usize,
     pub videoer: usize,
     pub duplikater: usize,
@@ -104,12 +105,12 @@ impl Plan {
                 };
                 (PathBuf::from(MAPPE_DUPLIKATER).join(under), Rolle::Duplikat)
             } else {
-                match f.medietype {
-                    Medietype::Bilde => r.bilder += 1,
-                    Medietype::Video => r.videoer += 1,
-                }
                 match f.dato {
                     Some(d) => {
+                        match f.medietype {
+                            Medietype::Bilde => r.bilder += 1,
+                            Medietype::Video => r.videoer += 1,
+                        }
                         let topp = match f.medietype {
                             Medietype::Bilde => MAPPE_BILDER,
                             Medietype::Video => MAPPE_VIDEOER,
