@@ -205,7 +205,8 @@ function visResultat() {
       rad("Duplikater (legges i «Duplikater»)", `${r.duplikater} (${storrelse(r.duplikat_bytes)})`),
       rad("Uten sikker dato (legges i «Uten dato»)", r.uten_dato),
       rad("Filer med advarsel", r.med_advarsel),
-      rad("Kunne ikke leses", r.ulesbare)
+      rad("Kunne ikke leses", r.ulesbare),
+      rad("Like kopier i Google-album (kopieres ikke)", r.takeout_albumkopier ?? 0)
     ),
     el("p", { class: "hint" }, "Ingenting er kopiert ennå. Se gjennom fanene, og trykk «Kopier til samlingen» når du er fornøyd.")
   );

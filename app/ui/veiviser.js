@@ -168,6 +168,9 @@ function visFunn() {
     r.duplikater ? `${antall(r.duplikater, "bilde", "bilder")} finnes fra før og legges til side i «Duplikater»` : null,
     r.uten_dato ? `${antall(r.uten_dato, "bilde", "bilder")} uten sikker dato legges i «Uten dato»` : null,
     r.ulesbare ? `${antall(r.ulesbare, "fil", "filer")} kunne ikke leses og hoppes over` : null,
+    r.takeout_albumkopier
+      ? `${antall(r.takeout_albumkopier, "bilde", "bilder")} lå i flere Google-album og kopieres bare én gang`
+      : null,
   ].filter(Boolean);
   $("vvFunn").replaceChildren(...linjer.map((l) => el("li", {}, l)));
   $("vvKopier").disabled = r.filer === 0;

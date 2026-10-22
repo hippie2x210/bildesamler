@@ -38,6 +38,10 @@ pub struct Rapport {
     pub uten_dato: usize,
     pub med_advarsel: usize,
     pub ulesbare: usize,
+    /// Helt like kopier inne i Google Takeout (samme bilde i et album og i «Bilder fra år»).
+    /// De er byte for byte like originalen, så de kopieres ikke.
+    #[serde(default)]
+    pub takeout_albumkopier: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -93,6 +97,13 @@ impl Plan {
         let mut r = Rapport { filer: self.filer.len(), ulesbare: self.ulesbare.len(), ..Default::default() };
 
         for (i, f) in self.filer.iter().enumerate() {
+            if let Some(o) = original_for[i] {
+                let o = &self.filer[o];
+                if o.sha256 == f.sha256 && fra_takeout(&f.sti) && fra_takeout(&o.sti) {
+                    r.takeout_albumkopier += 1;
+                    continue;
+                }
+            }
             let navn = trygt_filnavn(&f.filnavn());
             let (mappe, rolle) = if let Some(o) = original_for[i] {
                 r.duplikater += 1;
@@ -133,6 +144,14 @@ impl Plan {
         self.handlinger = handlinger;
         self.rapport = r;
     }
+}
+
+/// Ligger filen i en utpakket Takeout-zip (`<mål>/.bildesamler/takeout/...`)?
+fn fra_takeout(sti: &Path) -> bool {
+    let deler: Vec<_> = sti.components().map(|c| c.as_os_str()).collect();
+    deler
+        .windows(2)
+        .any(|w| w[0] == crate::utfor::LOGGMAPPE && w[1] == crate::takeout::UTPAKKET)
 }
 
 /// Finner et navn som ikke er brukt i planen. Windows skiller ikke på store og små bokstaver.
