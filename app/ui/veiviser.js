@@ -64,6 +64,19 @@ async function oppdaterGoogle() {
     $("vvNedlastet").textContent += ` Tar imot ${underveis.size === 1 ? "én fil" : underveis.size + " filer"} til nå. Vent til de er ferdige før du sorterer.`;
   }
   $("vvGoogleSorter").disabled = !filer.length || underveis.size > 0;
+  // Bare steget brukeren er på nå er framhevet, så det er lett å se hva som er neste.
+  const na = filer.length && !underveis.size ? 3 : bestilt || underveis.size ? 2 : 1;
+  for (const t of document.querySelectorAll("#veiviser [data-trinn]")) {
+    const nr = Number(t.dataset.trinn);
+    t.classList.toggle("na", nr === na);
+    t.classList.toggle("gjort", nr < na);
+    t.querySelector(".stor-knapp").classList.toggle("hoved-knapp", nr === na);
+  }
+  $("vvGoogleNa").textContent = [
+    "Start med steg 1.",
+    underveis.size ? "Bildene lastes ned. La Google-vinduet stå åpent." : "Venter på e-post fra Google. Når den kommer, gå til steg 2.",
+    "Bildene er hentet. Gå til steg 3.",
+  ][na - 1];
 }
 
 $("vvBestill").addEventListener("click", () =>
