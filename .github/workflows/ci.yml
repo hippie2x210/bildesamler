@@ -97,9 +97,8 @@ jobs:
           } > keystore.properties
       - name: Bygg APK
         working-directory: app
-        env:
-          NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/${{ env.NDK_VERSJON }}
         run: |
+          export NDK_HOME="$ANDROID_HOME/ndk/$NDK_VERSJON"
           npx tauri android build --apk --target aarch64 --target armv7 \
             --config "{\"bundle\":{\"android\":{\"versionCode\":$((1000 + GITHUB_RUN_NUMBER))}}}"
           cp src-tauri/gen/android/app/build/outputs/apk/universal/release/*.apk "$GITHUB_WORKSPACE/CloudJumper.apk"
