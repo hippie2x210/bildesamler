@@ -136,6 +136,30 @@ $("vvGoogleSorter").addEventListener("click", async () => {
   }
 });
 
+// --- Mobil via kabel ---
+
+$("vvFinnTelefon").addEventListener("click", () =>
+  travel($("vvFinnTelefon"), "Leter …", async () => {
+    const liste = await invoke("telefoner");
+    $("vvTelefonTekst").textContent = liste.length
+      ? "Trykk på telefonen din."
+      : "Fant ingen telefon. Sjekk at den er låst opp og at du har valgt «Filoverføring» eller «Stol på», og prøv igjen.";
+    $("vvTelefoner").replaceChildren(
+      ...liste.map((t) =>
+        el("button", { class: "stor", onclick: () => velgTelefon(t) }, `📱 ${t.navn}`)
+      )
+    );
+  })
+);
+
+function velgTelefon(t) {
+  vv.telefon = t;
+  vv.kilder = [];
+  vv.fra = "telefon";
+  visSteg("samling");
+  $("vvSamling").textContent = samling();
+}
+
 // --- Mappe ---
 
 $("vvVelgMappe").addEventListener("click", async () => {
@@ -164,10 +188,25 @@ $("vvBrukSamling").addEventListener("click", async () => {
   $("mal").value = mal;
   $("apne").disabled = false;
   visSteg("jobber");
+  if (vv.fra === "telefon" && vv.telefon) {
+    $("vvJobberTittel").textContent = "Henter bildene fra telefonen …";
+    $("vvJobberTekst").textContent = "La telefonen være koblet til og ulåst. Bilder som er hentet før, hentes ikke på nytt.";
+    try {
+      const h = await invoke("telefon_hent", { id: vv.telefon.id, navn: vv.telefon.navn, mal });
+      vv.kilder = [h.mappe];
+      vv.telefonFeil = h.feil;
+    } catch (e) {
+      visSteg("telefon");
+      return vvFeil(e);
+    }
+  }
   $("vvJobberTittel").textContent = "Leser bildene …";
   $("vvJobberTekst").textContent = "CloudJumper ser på hvert bilde for å finne riktig dato og like bilder. Ingenting kopieres ennå.";
   try {
     oversikt = await invoke("skann", { kilder: vv.kilder, mal });
+    if (vv.fra === "telefon" && vv.telefonFeil?.length) {
+      oversikt.varsler.push(`${vv.telefonFeil.length} filer kunne ikke hentes fra telefonen. Koble til på nytt og prøv igjen, så hentes bare de som mangler.`);
+    }
     settKilder(vv.kilder);
     visteGrupper = SIDE;
     visResultat();
@@ -181,7 +220,8 @@ $("vvBrukSamling").addEventListener("click", async () => {
 listen("fremdrift", ({ payload }) => {
   const { fase, ferdig, total } = payload;
   $("vvLinje").style.width = total ? `${(100 * ferdig) / total}%` : "0";
-  if (fase === "pakker ut") $("vvJobberTittel").textContent = "Pakker opp filene fra Google …";
+  if (fase === "telefon") $("vvJobberTittel").textContent = `Henter bildene fra telefonen … (${ferdig} av ${total})`;
+  else if (fase === "pakker ut") $("vvJobberTittel").textContent = "Pakker opp filene fra Google …";
   else if (fase === "skanner") $("vvJobberTittel").textContent = `Leser bildene … (${ferdig} av ${total})`;
   else $("vvJobberTittel").textContent = `Kopierer … (${ferdig} av ${total})`;
 });

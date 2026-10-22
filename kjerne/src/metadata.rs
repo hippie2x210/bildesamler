@@ -3,7 +3,7 @@
 use crate::dato;
 use crate::modell::{Datokilde, Fil, Medietype, Tillit};
 use anyhow::{Context, Result};
-use chrono::{DateTime, NaiveDateTime};
+use chrono::{DateTime, NaiveDateTime, TimeZone};
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::io::{Cursor, Read, Seek, SeekFrom};
@@ -71,7 +71,10 @@ pub fn les(sti: &Path) -> Result<Fil> {
                 fil.phash = Some(dhash(&bilde));
             }
         }
-        Medietype::Video => fil.metadata_dato = mp4_dato(sti).ok().flatten(),
+        Medietype::Video => {
+            let (apple, mvhd) = mp4_datoer(sti).unwrap_or_default();
+            fil.metadata_dato = apple.or_else(|| mvhd.map(|utc| videotid(utc, fil.filnavn_dato)));
+        }
     }
     dato::velg(&mut fil);
     Ok(fil)
@@ -146,8 +149,18 @@ fn strom_sha256(sti: &Path) -> Result<String> {
     Ok(hex(&h.finalize()))
 }
 
-/// Finner `moov`-boksen i en MP4/MOV uten å lese hele filen (den kan ligge til slutt).
-fn mp4_dato(sti: &Path) -> Result<Option<NaiveDateTime>> {
+/// QuickTime-standarden lagrer opprettelsestiden i UTC, og det gjør mobiler. Noen kameraer skriver
+/// likevel lokal tid. Stemmer tiden minutt for minutt med filnavnet, er den allerede lokal.
+pub fn videotid(utc: NaiveDateTime, filnavn: Option<NaiveDateTime>) -> NaiveDateTime {
+    if filnavn.is_some_and(|f| (f - utc).num_seconds().abs() <= 120) {
+        return utc;
+    }
+    chrono::Local.from_utc_datetime(&utc).naive_local()
+}
+
+/// Leser datoene i en MP4/MOV: Apples `com.apple.quicktime.creationdate` (lokal tid med sone, slik
+/// iPhone skriver den) og `mvhd` (UTC). Finner `moov` uten å lese hele filen (den kan ligge til slutt).
+fn mp4_datoer(sti: &Path) -> Result<(Option<NaiveDateTime>, Option<NaiveDateTime>)> {
     let mut f = fs::File::open(sti)?;
     let lengde = f.metadata()?.len();
     let mut pos = 0u64;
@@ -165,17 +178,52 @@ fn mp4_dato(sti: &Path) -> Result<Option<NaiveDateTime>> {
             storrelse = lengde - pos;
         }
         if storrelse < hodelengde {
-            return Ok(None);
+            return Ok((None, None));
         }
         if &hode[4..8] == b"moov" {
             let innhold = (storrelse - hodelengde).min(64 << 20) as usize;
             let mut moov = vec![0u8; innhold];
             f.read_exact(&mut moov)?;
-            return Ok(mvhd_dato(&moov));
+            return Ok((apple_dato(&moov), mvhd_dato(&moov)));
         }
         pos += storrelse;
     }
-    Ok(None)
+    Ok((None, None))
+}
+
+/// `moov/meta` med `keys` og `ilst`: finner verdien til `com.apple.quicktime.creationdate`,
+/// for eksempel «2019-07-04T14:30:00+0200», og bruker klokkeslettet slik det står (lokal tid der bildet ble tatt).
+fn apple_dato(moov: &[u8]) -> Option<NaiveDateTime> {
+    let mut meta = finn_boks(moov, b"meta")?;
+    // I ISO-filer har `meta` versjon og flagg først; i QuickTime-filer kommer boksene rett på.
+    if meta.get(4..8) != Some(b"hdlr".as_slice()) && meta.get(4..8) != Some(b"keys".as_slice()) {
+        meta = meta.get(4..)?;
+    }
+    let keys = finn_boks(meta, b"keys")?;
+    let antall = u32::from_be_bytes(keys.get(4..8)?.try_into().ok()?) as usize;
+    let mut rest = keys.get(8..)?;
+    let mut nummer = None;
+    for i in 1..=antall {
+        let lengde = u32::from_be_bytes(rest.get(..4)?.try_into().ok()?) as usize;
+        if rest.get(8..lengde)? == b"com.apple.quicktime.creationdate" {
+            nummer = Some(i as u32);
+            break;
+        }
+        rest = rest.get(lengde..)?;
+    }
+    let nummer = nummer?;
+    let mut ilst = finn_boks(meta, b"ilst")?;
+    while ilst.len() >= 8 {
+        let lengde = u32::from_be_bytes(ilst[..4].try_into().ok()?) as usize;
+        let element = ilst.get(..lengde.max(8))?;
+        if u32::from_be_bytes(element[4..8].try_into().ok()?) == nummer {
+            let data = finn_boks(&element[8..], b"data")?;
+            let tekst = std::str::from_utf8(data.get(8..)?).ok()?.trim();
+            return DateTime::parse_from_str(tekst, "%Y-%m-%dT%H:%M:%S%z").ok().map(|d| d.naive_local());
+        }
+        ilst = ilst.get(lengde.max(8)..)?;
+    }
+    None
 }
 
 /// Opprettelsestid fra `mvhd` (sekunder siden 1904, UTC).
@@ -222,4 +270,46 @@ fn finn_boks<'a>(mut data: &'a [u8], navn: &[u8; 4]) -> Option<&'a [u8]> {
 
 fn hex(b: &[u8]) -> String {
     b.iter().map(|x| format!("{x:02x}")).collect()
+}
+
+#[cfg(test)]
+mod tester {
+    use super::*;
+
+    fn boks(navn: &[u8; 4], innhold: &[u8]) -> Vec<u8> {
+        let mut b = ((innhold.len() + 8) as u32).to_be_bytes().to_vec();
+        b.extend_from_slice(navn);
+        b.extend_from_slice(innhold);
+        b
+    }
+
+    #[test]
+    fn leser_apples_dato_med_sone() {
+        let nokkel = b"com.apple.quicktime.creationdate";
+        let mut keys = vec![0, 0, 0, 0, 0, 0, 0, 1];
+        keys.extend(((nokkel.len() + 8) as u32).to_be_bytes());
+        keys.extend(b"mdta");
+        keys.extend(nokkel);
+        let mut data = vec![0, 0, 0, 1, 0, 0, 0, 0];
+        data.extend(b"2019-07-04T23:30:00+0200");
+        let element = {
+            let innhold = boks(b"data", &data);
+            let mut e = ((innhold.len() + 8) as u32).to_be_bytes().to_vec();
+            e.extend(1u32.to_be_bytes());
+            e.extend(innhold);
+            e
+        };
+        let mut meta = boks(b"hdlr", &[0; 24]);
+        meta.extend(boks(b"keys", &keys));
+        meta.extend(boks(b"ilst", &element));
+        let moov = boks(b"meta", &meta);
+        let ventet = NaiveDateTime::parse_from_str("2019-07-04 23:30:00", "%Y-%m-%d %H:%M:%S").unwrap();
+        assert_eq!(apple_dato(&moov), Some(ventet));
+    }
+
+    #[test]
+    fn videotid_som_stemmer_med_filnavnet_er_lokal() {
+        let t = NaiveDateTime::parse_from_str("2019-07-04 12:00:00", "%Y-%m-%d %H:%M:%S").unwrap();
+        assert_eq!(videotid(t, Some(t + chrono::Duration::seconds(30))), t);
+    }
 }
