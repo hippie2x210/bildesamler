@@ -82,6 +82,10 @@ fn nesten_like(a: &Fil, b: &Fil) -> bool {
     if (forhold(a) / forhold(b) - 1.0).abs() > 0.03 {
         return false;
     }
+    // En redigert versjon («-redigert», «-edited») er et eget bilde brukeren har laget, ikke en kopi.
+    if er_redigert(&a.filnavn()) != er_redigert(&b.filnavn()) {
+        return false;
+    }
     // To bilder med hver sin sikre opptakstid er serieopptak, ikke kopier.
     !matches!((a.metadata_dato, b.metadata_dato), (Some(x), Some(y)) if x != y)
 }
@@ -102,6 +106,12 @@ fn rangering(f: &Fil) -> (u8, bool, bool, u64, u64, bool, std::cmp::Reverse<usiz
 pub fn ser_ut_som_kopi(navn: &str) -> bool {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| Regex::new(r"(?i)\(\d+\)|\bkopi\b|\bcopy\b|-WA\d{4}|_edited|-redigert").unwrap())
+        .is_match(navn)
+}
+
+pub fn er_redigert(navn: &str) -> bool {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"(?i)[-_ ](edited|redigert|bearbeitet|modifié|editado)\b").unwrap())
         .is_match(navn)
 }
 

@@ -92,6 +92,20 @@ impl Plan {
             }
         }
 
+        // Live Photos: en kort video med samme navn som et bilde i samme mappe (IMG_0001.HEIC + IMG_0001.MOV)
+        // legges ved siden av bildet, så paret holdes sammen.
+        let mut bilde_i_mappe: std::collections::HashMap<(PathBuf, String), usize> = std::collections::HashMap::new();
+        for (i, f) in self.filer.iter().enumerate() {
+            if f.medietype == Medietype::Bilde {
+                bilde_i_mappe.insert(par_nokkel(&f.sti), i);
+            }
+        }
+        let live_bilde: Vec<Option<usize>> = self
+            .filer
+            .iter()
+            .map(|f| (f.medietype == Medietype::Video).then(|| bilde_i_mappe.get(&par_nokkel(&f.sti)).copied()).flatten())
+            .collect();
+
         let mut brukt = HashSet::new();
         let mut handlinger = Vec::with_capacity(self.filer.len());
         let mut r = Rapport { filer: self.filer.len(), ulesbare: self.ulesbare.len(), ..Default::default() };
@@ -126,6 +140,9 @@ impl Plan {
                             Medietype::Bilde => MAPPE_BILDER,
                             Medietype::Video => MAPPE_VIDEOER,
                         };
+                        // Har bildet i paret en dato, følger videoen den, ellers sin egen.
+                        let d = live_bilde[i].and_then(|b| self.filer[b].dato).unwrap_or(d);
+                        let topp = if live_bilde[i].is_some() { MAPPE_BILDER } else { topp };
                         let mappe = PathBuf::from(topp).join(d.format("%Y").to_string()).join(d.format("%m").to_string());
                         (mappe, Rolle::Original)
                     }
@@ -144,6 +161,12 @@ impl Plan {
         self.handlinger = handlinger;
         self.rapport = r;
     }
+}
+
+/// Mappe og filnavn uten endelse, uten forskjell på store og små bokstaver.
+fn par_nokkel(sti: &Path) -> (PathBuf, String) {
+    let stamme = sti.file_stem().map(|s| s.to_string_lossy().to_lowercase()).unwrap_or_default();
+    (sti.parent().map(Path::to_path_buf).unwrap_or_default(), stamme)
 }
 
 /// Ligger filen i en utpakket Takeout-zip (`<mål>/.cloudjumper/takeout/...`)?
