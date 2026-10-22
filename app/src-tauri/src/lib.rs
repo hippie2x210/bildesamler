@@ -7,6 +7,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager, State};
 
+mod mobil;
+
 #[derive(Default)]
 struct Tilstand(Mutex<Option<Plan>>);
 
@@ -289,13 +291,22 @@ fn google_status(app: AppHandle) -> GoogleStatus {
         satt_opp: google_klient(&app).is_ok(),
         innlogget: google::er_innlogget(),
         nedlastinger: sti(app.path().download_dir()),
+        #[cfg(desktop)]
         standard_samling: sti(app.path().picture_dir().map(|p| p.join("CloudJumper"))),
+        #[cfg(mobile)]
+        standard_samling: mobil::standard_samling(),
     }
 }
 
 /// Mappen nedlastinger fra Google-vinduet havner i, så veiviseren kan skanne den.
 #[tauri::command]
 fn google_nedlastingsmappe(app: AppHandle, mal: Option<String>) -> Result<String, String> {
+    #[cfg(mobile)]
+    return {
+        let _ = (app, mal);
+        Ok(mobil::NEDLASTINGER.into())
+    };
+    #[cfg(desktop)]
     nedlastingsmappe(&app, mal.as_deref()).map(|p| p.to_string_lossy().into_owned())
 }
 
@@ -325,6 +336,7 @@ fn google_logg_ut() -> Result<(), String> {
 /// Forklaringen nederst i Google-vinduet, så brukeren vet hva hen skal trykke på. På siden med
 /// eksportens filer legger den også en knapp «Last ned alle», så ingen må trykke «Last ned» 14 ganger.
 /// Skriptet sender ingenting fra siden, bortsett fra adressene til nedlastingene når knappen trykkes.
+#[cfg(desktop)]
 const GOOGLE_HJELP: &str = r#"
 (function () {
   if (window.top !== window) return;
@@ -412,6 +424,7 @@ const GOOGLE_HJELP: &str = r#"
 })();
 "#;
 
+#[cfg(desktop)]
 #[derive(Clone, Serialize)]
 struct GoogleNedlasting {
     fil: String,
@@ -421,6 +434,7 @@ struct GoogleNedlasting {
 
 /// «Last ned alle»: filene som venter, og hvor mange som lastes ned akkurat nå. To om gangen holder
 /// linja i bruk uten at en treg forbindelse må dele seg på 14 store filer.
+#[cfg(desktop)]
 #[derive(Default)]
 struct Ko {
     venter: std::collections::VecDeque<tauri::Url>,
@@ -430,10 +444,13 @@ struct Ko {
     feilet: usize,
 }
 
+#[cfg(desktop)]
 const SAMTIDIGE: usize = 2;
+#[cfg(desktop)]
 static KO: Mutex<Ko> = Mutex::new(Ko { venter: std::collections::VecDeque::new(), aktive: 0, totalt: 0, ferdige: 0, feilet: 0 });
 
 /// Starter neste fil i køen hvis det er plass, og viser fremdriften nederst i Google-vinduet.
+#[cfg(desktop)]
 fn neste_i_ko(app: &AppHandle) {
     let (neste, tekst) = {
         let mut ko = KO.lock().unwrap();
@@ -478,15 +495,18 @@ fn neste_i_ko(app: &AppHandle) {
 }
 
 /// Filene som er lastet helt ned før. De hoppes over hvis brukeren trykker «Last ned alle» igjen.
+#[cfg(desktop)]
 fn ferdigliste(mappe: &Path) -> PathBuf {
     mappe.join("ferdige.txt")
 }
 
+#[cfg(desktop)]
 fn er_ferdig(mappe: &Path, fil: &Path) -> bool {
     let Some(navn) = fil.file_name().and_then(|n| n.to_str()) else { return false };
     fil.exists() && std::fs::read_to_string(ferdigliste(mappe)).is_ok_and(|s| s.lines().any(|l| l == navn))
 }
 
+#[cfg(desktop)]
 fn merk_ferdig(mappe: &Path, fil: &Path) {
     use std::io::Write;
     if let Some(navn) = fil.file_name().and_then(|n| n.to_str()) {
@@ -497,6 +517,7 @@ fn merk_ferdig(mappe: &Path, fil: &Path) {
 }
 
 /// Mappen Takeout-zip-ene lastes ned til: i samlingen hvis den er valgt, ellers i appens egen mappe.
+#[cfg(desktop)]
 fn nedlastingsmappe(app: &AppHandle, mal: Option<&str>) -> Result<PathBuf, String> {
     let mappe = match mal.filter(|m| !m.trim().is_empty()) {
         Some(m) => {
@@ -511,6 +532,7 @@ fn nedlastingsmappe(app: &AppHandle, mal: Option<&str>) -> Result<PathBuf, Strin
 
 /// Åpner (eller bytter side i) CloudJumper sitt eget Google-vindu. Brukeren forlater aldri appen,
 /// og nedlastinger fanges opp og legges i `nedlastet`-mappen i stedet for i Nedlastinger.
+#[cfg(desktop)]
 fn apne_google_vindu(app: &AppHandle, adresse: &str, mal: Option<&str>) -> Result<(), String> {
     let url: tauri::Url = adresse.parse().map_err(|e| format!("{e}"))?;
     if let Some(vindu) = app.get_webview_window("google") {
@@ -626,6 +648,9 @@ async fn google_vindu(app: AppHandle, mal: Option<String>, side: Option<String>)
         Some("nedlastinger") => google::TAKEOUT_NEDLASTINGER,
         _ => google::TAKEOUT_FOTO,
     };
+    #[cfg(mobile)]
+    return mobil::apne_nettside(&app, adresse, mal.as_deref());
+    #[cfg(desktop)]
     apne_google_vindu(&app, adresse, mal.as_deref())
 }
 
@@ -639,6 +664,9 @@ async fn google_hent(app: AppHandle, mal: Option<String>) -> Result<Option<googl
         .map_err(|e| format!("{e:#}"))?;
     let Some(nyeste) = poster.into_iter().next() else { return Ok(None) };
     for lenke in &nyeste.lenker {
+        #[cfg(mobile)]
+        mobil::apne_nettside(&app, lenke, mal.as_deref())?;
+        #[cfg(desktop)]
         apne_google_vindu(&app, lenke, mal.as_deref())?;
         // Litt pause mellom delene, så hver nedlasting rekker å starte.
         pause(std::time::Duration::from_secs(3)).await;
@@ -697,9 +725,11 @@ async fn pause(d: std::time::Duration) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
-        // Starter man appen en gang til, hentes vinduet som allerede er åpent fram.
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| hent_fram(app)))
+    let bygger = tauri::Builder::default();
+    // Starter man appen en gang til, hentes vinduet som allerede er åpent fram. Telefonen har bare ett vindu.
+    #[cfg(desktop)]
+    let bygger = bygger.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| hent_fram(app)));
+    bygger
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(Tilstand::default())
@@ -733,10 +763,14 @@ pub fn run() {
             google_nedlastingsmappe,
             google_logg_inn,
             google_logg_ut,
-            google_hent
+            google_hent,
+            mobil::mappeliste
         ])
         .setup(|app| {
+            #[cfg(desktop)]
             hent_fram(app.handle());
+            #[cfg(mobile)]
+            let _ = app;
             Ok(())
         })
         .run(tauri::generate_context!())
@@ -744,6 +778,7 @@ pub fn run() {
 }
 
 /// Windows lar ofte et nytt vindu bli liggende bak andre programmer, så vi ber om fokus selv.
+#[cfg(desktop)]
 fn hent_fram(app: &AppHandle) {
     if let Some(vindu) = app.get_webview_window("main") {
         let _ = vindu.unminimize();

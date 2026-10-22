@@ -37,12 +37,15 @@ Originalen er den med sikrest dato, deretter kameradata, GPS, oppløsning og fil
 | `kjerne/` | Rust-biblioteket som gjør alt arbeidet |
 | `app/ui/` | Grensesnittet (HTML/JS med [XP.css](https://github.com/botoxparty/XP.css)) |
 | `app/src-tauri/` | Tauri-skallet som kobler grensesnittet til kjernen |
+| `app/src-tauri/gen/android/` | Android-appen (se [docs/android.md](docs/android.md)) |
 | `testdata/` | Testbilder og `fasit.csv`, laget av `tools/lag_testbilder.py` |
 
 ```sh
 cargo test -p cloudjumper-kjerne --release   # test mot fasiten
 cd app && npm ci && npx tauri dev            # kjør appen
 cd app && npx tauri build                    # lag Windows-installasjon
+cd app && npx tauri android build --apk      # lag Android-app (krever Android SDK og NDK)
 ```
 
 GitHub Actions tester på Linux og Windows og legger installasjonsfilen ved hver kjøring under «Artifacts».
+Android-appen (APK) bygges i samme kjøring og legges også ut under Releases som «CloudJumper for Android (siste testbygg)».
