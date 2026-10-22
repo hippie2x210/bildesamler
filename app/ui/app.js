@@ -88,6 +88,16 @@ function opptatt(ja) {
 
 // --- Handlinger ---
 
+// Viser et spørsmål og svarer nei hvis vinduet ikke kan vises, så ingenting skjer ubekreftet.
+async function sporBruker(tekst, valg) {
+  try {
+    return await ask(tekst, valg);
+  } catch (e) {
+    visFeil(`Kunne ikke vise spørsmålet: ${e}`);
+    return false;
+  }
+}
+
 $("skann").addEventListener("click", async () => {
   $("varsler").replaceChildren();
   opptatt(true);
@@ -108,7 +118,7 @@ $("skann").addEventListener("click", async () => {
 
 $("kopier").addEventListener("click", async () => {
   const r = oversikt.rapport;
-  const ok = await ask(
+  const ok = await sporBruker(
     `Kopiere ${r.filer} filer til ${$("mal").value}?\n\n` +
       `${r.duplikater} duplikater legges i «Duplikater». Originalene blir liggende der de er.`,
     { title: "Kopier til samlingen", kind: "info", okLabel: "Kopier", cancelLabel: "Avbryt" }
@@ -135,7 +145,7 @@ $("kopier").addEventListener("click", async () => {
 $("angre").addEventListener("click", async () => {
   const mal = $("mal").value;
   if (!mal) return visFeil("Velg målmappen du vil angre i.");
-  const ok = await ask("Angre siste kopiering? Kopiene flyttes til mappen «_Angret» i samlingen. Ingenting slettes.", {
+  const ok = await sporBruker("Angre siste kopiering? Kopiene flyttes til mappen «_Angret» i samlingen. Ingenting slettes.", {
     title: "Angre",
     kind: "warning",
     okLabel: "Angre",

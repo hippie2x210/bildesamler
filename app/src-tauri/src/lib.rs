@@ -205,10 +205,25 @@ fn apne_mappe(sti: String) -> Result<(), String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // Starter man appen en gang til, hentes vinduet som allerede er åpent fram.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| hent_fram(app)))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(Tilstand::default())
         .invoke_handler(tauri::generate_handler![skann, sett_original, kopier, angre, apne_mappe])
+        .setup(|app| {
+            hent_fram(app.handle());
+            Ok(())
+        })
         .run(tauri::generate_context!())
         .expect("CloudJumper kunne ikke starte");
+}
+
+/// Windows lar ofte et nytt vindu bli liggende bak andre programmer, så vi ber om fokus selv.
+fn hent_fram(app: &AppHandle) {
+    if let Some(vindu) = app.get_webview_window("main") {
+        let _ = vindu.unminimize();
+        let _ = vindu.show();
+        let _ = vindu.set_focus();
+    }
 }

@@ -29,10 +29,13 @@ html, body {
 
 fieldset { margin: 0; }
 
-/* XP.css 0.2.6 mangler stil for deaktiverte knapper, så teksten forsvant på Windows. */
+/* Teksten på deaktiverte knapper forsvant i WebView2 på Windows, også med grå farge.
+   Vi beholder svart tekst og toner ned hele knappen i stedet. */
 button:disabled {
-  color: #a19f95;
-  text-shadow: 1px 1px 0 #fff;
+  color: #000 !important;
+  -webkit-text-fill-color: #000 !important;
+  text-shadow: none;
+  opacity: 0.5;
 }
 
 #kilder { width: 100%; min-height: 64px; }
