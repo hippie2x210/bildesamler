@@ -69,7 +69,8 @@ jobs:
           java-version: 21
       # Android SDK finnes allerede på ubuntu-runneren (ANDROID_HOME). Bare NDK-en må hentes.
       - name: Installer Android NDK
-        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;${NDK_VERSJON}" > /dev/null
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;${NDK_VERSJON}" > /dev/null
       - uses: actions/setup-node@v4
         with:
           node-version: 22
