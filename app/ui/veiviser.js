@@ -14,6 +14,21 @@ function visSteg(navn) {
   if (navn === "google") oppdaterGoogle();
 }
 
+// Viser at noe skjer mens en knapp jobber, så ingen tror appen har hengt seg.
+async function travel(knapp, tekst, arbeid) {
+  const foer = knapp.textContent;
+  knapp.disabled = true;
+  knapp.textContent = tekst;
+  try {
+    return await arbeid();
+  } catch (e) {
+    vvFeil(e);
+  } finally {
+    knapp.disabled = false;
+    knapp.textContent = foer;
+  }
+}
+
 function vvFeil(melding) {
   $("vvFeil").textContent = String(melding);
   $("vvFeil").hidden = false;
@@ -48,26 +63,20 @@ async function oppdaterGoogle() {
   $("vvGoogleSorter").disabled = !filer.length;
 }
 
-$("vvBestill").addEventListener("click", async () => {
-  try {
+$("vvBestill").addEventListener("click", () =>
+  travel($("vvBestill"), "Åpner Google …", async () => {
     await invoke("google_vindu", { mal: samling(), side: "bestill" });
     lagre("googleBestilt", Date.now());
     oppdaterGoogle();
-  } catch (e) {
-    vvFeil(e);
-  }
-});
+  })
+);
 
-$("vvHent").addEventListener("click", async () => {
-  try {
-    await invoke("google_vindu", { mal: samling(), side: "nedlastinger" });
-  } catch (e) {
-    vvFeil(e);
-  }
-});
+$("vvHent").addEventListener("click", () =>
+  travel($("vvHent"), "Åpner Google …", () => invoke("google_vindu", { mal: samling(), side: "nedlastinger" }))
+);
 
-$("vvGmail").addEventListener("click", async () => {
-  try {
+$("vvGmail").addEventListener("click", () => travel($("vvGmail"), "Sjekker e-posten …", async () => {
+  {
     if (!vv.status.innlogget) {
       await invoke("google_logg_inn");
       vv.status.innlogget = true;
@@ -76,10 +85,8 @@ $("vvGmail").addEventListener("click", async () => {
     $("vvNedlastet").textContent = post
       ? `Fant e-posten fra Google (${datoTekst(post.mottatt_ms)}). Henter ${post.lenker.length} ${post.lenker.length === 1 ? "fil" : "filer"} …`
       : "Fant ingen e-post fra Google Takeout de siste to ukene. Har du bedt Google om bildene?";
-  } catch (e) {
-    vvFeil(e);
   }
-});
+}));
 
 listen("google-nedlasting", ({ payload }) => {
   if (!payload.ferdig) {
@@ -175,7 +182,11 @@ function visFunn() {
   $("vvFunn").replaceChildren(...linjer.map((l) => el("li", {}, l)));
   $("vvKopier").disabled = r.filer === 0;
   visSteg("klar");
-  for (const v of oversikt.varsler) vvFeil(v);
+  const varsler = oversikt.varsler;
+  $("vvVarsler").hidden = !varsler.length;
+  $("vvVarsler").replaceChildren(
+    varsler.length === 1 ? varsler[0] : el("ul", {}, varsler.map((v) => el("li", {}, v)))
+  );
 }
 
 $("vvKopier").addEventListener("click", async () => {

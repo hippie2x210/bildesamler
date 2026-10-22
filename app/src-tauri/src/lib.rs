@@ -205,8 +205,12 @@ async fn kopier(app: AppHandle, tilstand: State<'_, Tilstand>) -> Result<utfor::
 }
 
 #[tauri::command]
-fn angre(mal: String) -> Result<usize, String> {
-    utfor::angre_siste(Path::new(&mal)).map_err(|e| format!("{e:#}"))
+async fn angre(mal: String) -> Result<usize, String> {
+    // Kan flytte mange filer, så det skjer utenfor hovedtråden og grensesnittet ikke fryser.
+    tauri::async_runtime::spawn_blocking(move || utfor::angre_siste(Path::new(&mal)))
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|e| format!("{e:#}"))
 }
 
 #[tauri::command]
@@ -268,7 +272,7 @@ fn google_nedlastingsmappe(app: AppHandle, mal: Option<String>) -> Result<String
 }
 
 #[tauri::command]
-fn google_bestill() -> Result<(), String> {
+async fn google_bestill() -> Result<(), String> {
     tauri_plugin_opener::open_url(google::TAKEOUT_FOTO, None::<&str>).map_err(|e| e.to_string())
 }
 
@@ -351,7 +355,7 @@ fn apne_google_vindu(app: &AppHandle, adresse: &str, mal: Option<&str>) -> Resul
     }
     let mappe = nedlastingsmappe(app, mal)?;
     let app2 = app.clone();
-    tauri::WebviewWindowBuilder::new(app, "google", tauri::WebviewUrl::External(url))
+    let vindu = tauri::WebviewWindowBuilder::new(app, "google", tauri::WebviewUrl::External(url))
         .title("CloudJumper – Google Foto")
         .inner_size(1000.0, 800.0)
         .initialization_script(GOOGLE_HJELP)
@@ -381,12 +385,14 @@ fn apne_google_vindu(app: &AppHandle, adresse: &str, mal: Option<&str>) -> Resul
         })
         .build()
         .map_err(|e| format!("Kunne ikke åpne Google-vinduet: {e}"))?;
+    let _ = vindu.set_focus();
     Ok(())
 }
 
 /// Åpner Takeout med bare Google Foto valgt, inne i CloudJumper.
+/// Må være async: på Windows låser appen seg hvis et vindu lages fra en synkron kommando.
 #[tauri::command]
-fn google_vindu(app: AppHandle, mal: Option<String>, side: Option<String>) -> Result<(), String> {
+async fn google_vindu(app: AppHandle, mal: Option<String>, side: Option<String>) -> Result<(), String> {
     let adresse = match side.as_deref() {
         Some("nedlastinger") => google::TAKEOUT_NEDLASTINGER,
         _ => google::TAKEOUT_FOTO,

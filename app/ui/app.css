@@ -116,6 +116,10 @@ table.tall td:last-child { text-align: right; font-weight: bold; }
 .kort .info { margin-top: 4px; line-height: 1.4; word-break: break-all; }
 
 .liste { width: 100%; border-collapse: collapse; background: #fff; }
+.liste td.mini { width: 56px; }
+.liste td.mini img { width: 48px; height: 48px; object-fit: cover; display: block; background: #ddd; }
+.liste .mappe { color: #555; }
+.varsel ul { margin: 0; padding-left: 18px; }
 .liste th, .liste td { text-align: left; padding: 3px 6px; border-bottom: 1px solid #eee; vertical-align: top; }
 
 /* --- Veiviseren: stor tekst og store knapper, ett steg om gangen --- */
@@ -141,3 +145,4 @@ table.tall td:last-child { text-align: right; font-weight: bold; }
 .veiviser .funn { font-size: 20px; line-height: 1.7; }
 .veiviser .stor-linje { height: 28px; max-width: 700px; }
 .veiviser .avansert-lenke { margin-top: auto; align-self: flex-end; font-size: 13px; }
+.veiviser .stor-varsel { font-size: 16px; margin: 0 0 14px; max-width: 46em; }

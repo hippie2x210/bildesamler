@@ -41,6 +41,15 @@ function visFeil(melding) {
   $("varsler").replaceChildren(el("div", { class: "feil" }, String(melding)));
 }
 
+// Flere varsler samles i én gul boks i stedet for en lang rekke.
+function visVarsler(varsler) {
+  if (!varsler.length) return $("varsler").replaceChildren();
+  const boks = el("div", { class: "varsel" });
+  if (varsler.length === 1) boks.append(varsler[0]);
+  else boks.append(el("ul", {}, varsler.map((v) => el("li", {}, v))));
+  $("varsler").replaceChildren(boks);
+}
+
 // --- Mapper ---
 
 function kilder() { return [...$("kilder").options].map((o) => o.value); }
@@ -189,11 +198,15 @@ function visResultat() {
   $("resultat").hidden = false;
   $("kopier").disabled = false;
 
-  const varsler = o.varsler.map((v) => el("div", { class: "varsel" }, v));
-  if (o.ulesbare.length) {
-    varsler.push(el("div", { class: "varsel" }, `${o.ulesbare.length} filer kunne ikke leses og blir ikke kopiert.`));
+  const varsler = [...o.varsler];
+  if (o.ulesbare.length) varsler.push(`${o.ulesbare.length} filer kunne ikke leses og blir ikke kopiert.`);
+  visVarsler(varsler);
+  const r0 = o.rapport;
+  const antallPaa = { duplikater: r0.duplikater, utenDato: r0.uten_dato, advarsler: r0.med_advarsel };
+  for (const fane of document.querySelectorAll('[role="tab"]')) {
+    const n = antallPaa[fane.dataset.fane];
+    fane.textContent = fane.textContent.replace(/ \(\d+\)$/, "") + (n ? ` (${n})` : "");
   }
-  $("varsler").replaceChildren(...varsler);
 
   const r = o.rapport;
   const rad = (t, v) => el("tr", {}, el("td", {}, t), el("td", {}, v));
@@ -263,18 +276,35 @@ async function velgOriginal(gruppe, fil) {
   }
 }
 
-function filTabell(filer, tom) {
+// «C:\...\.bildesamler\takeout\takeout-…\Takeout\Google Foto\Bilder fra 2019» → «Google Foto › Bilder fra 2019».
+function kortMappe(sti) {
+  const deler = sti.split(/[\\/]/);
+  deler.pop();
+  const foto = deler.findIndex((d) => /^google (photo|foto)/i.test(d));
+  const synlige = foto >= 0 ? deler.slice(foto) : deler.slice(-2);
+  return synlige.join(" › ");
+}
+
+const RADER = 100;
+
+function filTabell(filer, tom, vis = RADER) {
   if (!filer.length) return el("p", {}, tom);
-  return el("table", { class: "liste" },
-    el("tr", {}, el("th", {}, "Fil"), el("th", {}, "Dato"), el("th", {}, "Merknad")),
-    filer.map((f) =>
+  const tabell = el("table", { class: "liste" },
+    el("tr", {}, el("th", {}, ""), el("th", {}, "Fil"), el("th", {}, "Dato"), el("th", {}, "Merknad")),
+    filer.slice(0, vis).map((f) =>
       el("tr", {},
-        el("td", {}, f.sti),
+        el("td", { class: "mini" }, el("img", { src: convertFileSrc(f.sti), loading: "lazy", alt: "" })),
+        el("td", { title: f.sti }, el("b", {}, f.navn), el("br"), el("span", { class: "mappe" }, kortMappe(f.sti))),
         el("td", {}, f.dato ?? "–"),
         el("td", {}, f.advarsler.join(" "))
       )
     )
   );
+  if (vis >= filer.length) return tabell;
+  const flere = el("button", {}, `Vis flere (${filer.length - vis} til)`);
+  const boks = el("div", {}, tabell, flere);
+  flere.addEventListener("click", () => boks.replaceWith(filTabell(filer, tom, vis + RADER)));
+  return boks;
 }
 
 // --- Oppstart ---
