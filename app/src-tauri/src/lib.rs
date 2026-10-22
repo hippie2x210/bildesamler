@@ -1,7 +1,7 @@
 //! Skallet rundt kjernen: kommandoer grensesnittet kan kalle, og fremdrift tilbake.
 
 use cloudjumper_kjerne::{lag_plan, miniatyr, modell::{Datokilde, Tillit}, plan::Rolle, takeout, utfor, Plan};
-use cloudjumper_sky::google;
+use cloudjumper_sky::{google, onedrive};
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -270,6 +270,71 @@ fn google_klient(app: &AppHandle) -> Result<google::Klient, String> {
         "Google-innlogging er ikke satt opp i denne versjonen. Legg google-klient.json i {}",
         steder.first().map(|p| p.display().to_string()).unwrap_or_default()
     ))
+}
+
+/// App-ID-en fra Azure (ikke hemmelig). Bygges inn fra CLOUDJUMPER_ONEDRIVE_KLIENT, eller leses fra
+/// onedrive-klient.txt i appens innstillingsmappe eller ved siden av programmet.
+fn onedrive_klient(app: &AppHandle) -> Option<onedrive::Klient> {
+    let id = option_env!("CLOUDJUMPER_ONEDRIVE_KLIENT").map(str::to_string).or_else(|| {
+        let mut steder = Vec::new();
+        if let Ok(d) = app.path().app_config_dir() {
+            steder.push(d.join("onedrive-klient.txt"));
+        }
+        if let Some(d) = std::env::current_exe().ok().and_then(|e| e.parent().map(Path::to_path_buf)) {
+            steder.push(d.join("onedrive-klient.txt"));
+        }
+        steder.iter().find_map(|s| std::fs::read_to_string(s).ok())
+    })?;
+    let id = id.trim().to_string();
+    (!id.is_empty()).then_some(onedrive::Klient { client_id: id })
+}
+
+#[derive(Serialize)]
+struct OneDriveStatus {
+    satt_opp: bool,
+    innlogget: bool,
+}
+
+#[tauri::command]
+fn onedrive_status(app: AppHandle) -> OneDriveStatus {
+    OneDriveStatus { satt_opp: onedrive_klient(&app).is_some(), innlogget: onedrive::er_innlogget() }
+}
+
+#[tauri::command]
+async fn onedrive_logg_inn(app: AppHandle) -> Result<String, String> {
+    let klient = onedrive_klient(&app).ok_or("OneDrive er ikke satt opp i denne versjonen")?;
+    tauri::async_runtime::spawn_blocking(move || {
+        onedrive::logg_inn(&klient, &|adresse| {
+            tauri_plugin_opener::open_url(adresse, None::<&str>).map_err(|e| anyhow::anyhow!(e.to_string()))
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+    .map_err(|e| format!("{e:#}"))
+}
+
+#[tauri::command]
+fn onedrive_logg_ut() -> Result<(), String> {
+    onedrive::logg_ut().map_err(|e| format!("{e:#}"))
+}
+
+/// Laster ned bildene og videoene fra OneDrive til `<samling>/.cloudjumper/onedrive`, som så skannes.
+#[tauri::command]
+async fn onedrive_hent(app: AppHandle, mal: String) -> Result<onedrive::Henting, String> {
+    let klient = onedrive_klient(&app).ok_or("OneDrive er ikke satt opp i denne versjonen")?;
+    if mal.trim().is_empty() {
+        return Err("Velg hvor bildene skal samles.".into());
+    }
+    utfor::flytt_gammel_mappe(Path::new(&mal));
+    let mappe = PathBuf::from(&mal).join(utfor::LOGGMAPPE).join("onedrive");
+    tauri::async_runtime::spawn_blocking(move || {
+        onedrive::hent(&klient, &mappe, &|ferdig, total| {
+            let _ = app.emit("fremdrift", Fremdrift { fase: "onedrive", ferdig, total });
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+    .map_err(|e| format!("{e:#}"))
 }
 
 #[derive(Serialize)]
@@ -731,6 +796,10 @@ pub fn run() {
             angre,
             telefoner,
             telefon_hent,
+            onedrive_status,
+            onedrive_logg_inn,
+            onedrive_logg_ut,
+            onedrive_hent,
             apne_mappe,
             google_status,
             google_bestill,

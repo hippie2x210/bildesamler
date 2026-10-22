@@ -156,6 +156,19 @@ function velgTelefon(t) {
   $("vvSamling").textContent = samling();
 }
 
+// --- OneDrive ---
+
+$("vvOneDriveLoggInn").addEventListener("click", () =>
+  travel($("vvOneDriveLoggInn"), "Venter på innlogging i nettleseren …", async () => {
+    const navn = await invoke("onedrive_logg_inn");
+    $("vvOneDriveTekst").textContent = `Logget inn som ${navn}.`;
+    vv.kilder = [];
+    vv.fra = "onedrive";
+    visSteg("samling");
+    $("vvSamling").textContent = samling();
+  })
+);
+
 // --- Mappe ---
 
 $("vvVelgMappe").addEventListener("click", async () => {
@@ -196,12 +209,24 @@ $("vvBrukSamling").addEventListener("click", async () => {
       return vvFeil(e);
     }
   }
+  if (vv.fra === "onedrive") {
+    $("vvJobberTittel").textContent = "Henter bildene fra OneDrive …";
+    $("vvJobberTekst").textContent = "Dette kan ta lang tid på et tregt nett. Bilder som er hentet før, hentes ikke på nytt.";
+    try {
+      const h = await invoke("onedrive_hent", { mal });
+      vv.kilder = [h.mappe];
+      vv.telefonFeil = h.feil;
+    } catch (e) {
+      visSteg("onedrive");
+      return vvFeil(e);
+    }
+  }
   $("vvJobberTittel").textContent = "Leser bildene …";
   $("vvJobberTekst").textContent = "CloudJumper ser på hvert bilde for å finne riktig dato og like bilder. Ingenting kopieres ennå.";
   try {
     oversikt = await invoke("skann", { kilder: vv.kilder, mal });
-    if (vv.fra === "telefon" && vv.telefonFeil?.length) {
-      oversikt.varsler.push(`${vv.telefonFeil.length} filer kunne ikke hentes fra telefonen. Koble til på nytt og prøv igjen, så hentes bare de som mangler.`);
+    if ((vv.fra === "telefon" || vv.fra === "onedrive") && vv.telefonFeil?.length) {
+      oversikt.varsler.push(`${vv.telefonFeil.length} filer kunne ikke hentes ${vv.fra === "telefon" ? "fra telefonen" : "fra OneDrive"}. Prøv igjen senere, så hentes bare de som mangler.`);
     }
     settKilder(vv.kilder);
     visteGrupper = SIDE;
@@ -216,7 +241,8 @@ $("vvBrukSamling").addEventListener("click", async () => {
 listen("fremdrift", ({ payload }) => {
   const { fase, ferdig, total } = payload;
   $("vvLinje").style.width = total ? `${(100 * ferdig) / total}%` : "0";
-  if (fase === "telefon") $("vvJobberTittel").textContent = `Henter bildene fra telefonen … (${ferdig} av ${total})`;
+  if (fase === "onedrive") $("vvJobberTittel").textContent = `Henter bildene fra OneDrive … (${ferdig} av ${total})`;
+  else if (fase === "telefon") $("vvJobberTittel").textContent = `Henter bildene fra telefonen … (${ferdig} av ${total})`;
   else if (fase === "pakker ut") $("vvJobberTittel").textContent = "Pakker opp filene fra Google …";
   else if (fase === "skanner") $("vvJobberTittel").textContent = `Leser bildene … (${ferdig} av ${total})`;
   else $("vvJobberTittel").textContent = `Kopierer … (${ferdig} av ${total})`;
@@ -297,6 +323,9 @@ $("tilVeiviser").addEventListener("click", () => visAvansert(false));
   visAvansert(hent("avansert", false));
   try {
     vv.status = await invoke("google_status");
+  } catch {}
+  try {
+    $("vvOneDriveValg").hidden = !(await invoke("onedrive_status")).satt_opp;
   } catch {}
   if (!$("mal").value && vv.status?.standard_samling) $("mal").placeholder = vv.status.standard_samling;
 })();
