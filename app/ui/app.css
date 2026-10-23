@@ -1,0 +1,116 @@
+html, body {
+  margin: 0;
+  height: 100%;
+  background: #3a6ea5;
+  font-family: Tahoma, "Segoe UI", sans-serif;
+  font-size: 11px;
+}
+
+.hoved {
+  position: absolute;
+  inset: 8px;
+  display: flex;
+  flex-direction: column;
+}
+
+.hoved > .window-body {
+  flex: 1;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.oppsett {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+fieldset { margin: 0; }
+
+/* Teksten på deaktiverte knapper forsvant i WebView2 på Windows, også med grå farge.
+   Vi beholder svart tekst og toner ned hele knappen i stedet. */
+button:disabled {
+  color: #000 !important;
+  -webkit-text-fill-color: #000 !important;
+  text-shadow: none;
+  opacity: 0.5;
+}
+
+#kilder { width: 100%; min-height: 64px; }
+
+.knapper, .handling, .rad {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+
+.rad input { flex: 1; }
+
+.hint { color: #444; margin: 6px 0 0; }
+
+.fremdrift .linje {
+  height: 14px;
+  border: 1px solid #7f9db9;
+  background: #fff;
+  padding: 1px;
+}
+
+.fremdrift .linje div {
+  height: 100%;
+  width: 0;
+  background: repeating-linear-gradient(90deg, #2fb32f 0 8px, transparent 8px 10px);
+}
+
+.varsel {
+  border: 1px solid #c9a400;
+  background: #fff8c4;
+  padding: 6px 8px;
+}
+
+.feil {
+  border: 1px solid #b00;
+  background: #ffe4e4;
+  padding: 6px 8px;
+}
+
+.fane-innhold { padding: 8px; }
+
+table.tall { border-collapse: collapse; }
+table.tall td { padding: 2px 12px 2px 0; }
+table.tall td:last-child { text-align: right; font-weight: bold; }
+
+.gruppe {
+  border: 1px solid #aca899;
+  background: #fff;
+  margin-bottom: 8px;
+  padding: 6px;
+}
+
+.gruppe-tittel { margin-bottom: 4px; font-weight: bold; }
+
+.kort-rad { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.kort {
+  width: 180px;
+  border: 1px solid #d4d0c8;
+  padding: 4px;
+  background: #f5f4ea;
+}
+
+.kort.original { border: 2px solid #2fb32f; background: #eef9ee; }
+
+.kort img {
+  width: 100%;
+  height: 120px;
+  object-fit: contain;
+  background: #ddd;
+  display: block;
+}
+
+.kort .info { margin-top: 4px; line-height: 1.4; word-break: break-all; }
+
+.liste { width: 100%; border-collapse: collapse; background: #fff; }
+.liste th, .liste td { text-align: left; padding: 3px 6px; border-bottom: 1px solid #eee; vertical-align: top; }

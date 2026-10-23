@@ -1,0 +1,23 @@
+[package]
+name = "bildesamler-kjerne"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Leser datoer, finner duplikater og sorterer bilder og videoer. Sletter aldri noe."
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+anyhow.workspace = true
+kamadak-exif = "0.6"
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp", "gif", "bmp", "tiff"] }
+sha2 = "0.10"
+rayon = "1"
+walkdir = "2"
+regex = "1"
+
+[dev-dependencies]
+csv = "1"
+walkdir = "2"
+tempfile = "3"
