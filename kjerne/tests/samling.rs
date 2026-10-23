@@ -87,3 +87,21 @@ fn kopiering_overskriver_aldri() {
         .collect();
     assert!(rester.is_empty());
 }
+
+#[test]
+fn tom_plassholder_fra_avbrutt_kjoring_brukes_igjen() {
+    let d = tempfile::tempdir().unwrap();
+    let samling = d.path().join("Samling");
+    let mobil = d.path().join("Mobil");
+    bilde(&mobil.join("IMG_20190704_120000.jpg"), 640, 95);
+    let plan = lag_plan(&[mobil.clone()], &samling, &|_, _| {});
+
+    // Appen krasjet etter at navnet var reservert.
+    let plassholder = samling.join("Bilder/2019/07/IMG_20190704_120000.jpg");
+    fs::create_dir_all(plassholder.parent().unwrap()).unwrap();
+    fs::write(&plassholder, b"").unwrap();
+
+    assert_eq!(utfor::utfor(&plan, &|_, _| {}).unwrap().kopiert, 1);
+    assert_eq!(fs::read(&plassholder).unwrap(), fs::read(mobil.join("IMG_20190704_120000.jpg")).unwrap());
+    assert_eq!(fs::read_dir(samling.join("Bilder/2019/07")).unwrap().count(), 1);
+}

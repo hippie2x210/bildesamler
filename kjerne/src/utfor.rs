@@ -99,6 +99,11 @@ fn kopier_en(kilde: &Path, mal: &Path, til: &Path, sha: &str) -> Result<Option<P
                 if sha256_fil(&full)? == sha {
                     return Ok(None);
                 }
+                // En tom fil er en plassholder fra en kjøring som ble avbrutt (strømbrudd, appen krasjet).
+                // Den har ikke noe innhold å miste, så den brukes igjen i stedet for å bli stående.
+                if fs::metadata(&full).is_ok_and(|m| m.len() == 0) {
+                    break (rel, full);
+                }
                 n += 1;
             }
             Err(e) => return Err(e).with_context(|| format!("kunne ikke lage {}", full.display())),
