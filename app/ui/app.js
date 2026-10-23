@@ -139,7 +139,7 @@ $("skann").addEventListener("click", async () => {
 $("kopier").addEventListener("click", async () => {
   const r = oversikt.rapport;
   const ok = await sporBruker(
-    `Kopiere ${r.filer} filer til ${$("mal").value}?\n\n` +
+    `Kopiere ${r.bilder + r.videoer + r.duplikater + r.uten_dato} filer til ${$("mal").value}?\n\n` +
       `${r.duplikater} duplikater legges i «Duplikater». Originalene blir liggende der de er.`,
     { title: "Kopier til samlingen", kind: "info", okLabel: "Kopier", cancelLabel: "Avbryt" }
   );
@@ -219,7 +219,8 @@ function visResultat() {
       rad("Uten sikker dato (legges i «Uten dato»)", r.uten_dato),
       rad("Filer med advarsel", r.med_advarsel),
       rad("Kunne ikke leses", r.ulesbare),
-      rad("Like kopier i Google-album (kopieres ikke)", r.takeout_albumkopier ?? 0)
+      rad("Like kopier i Google-album (kopieres ikke)", r.takeout_albumkopier ?? 0),
+      rad("Finnes allerede i samlingen (kopieres ikke)", r.allerede_i_samlingen ?? 0)
     ),
     el("p", { class: "hint" }, "Ingenting er kopiert ennå. Se gjennom fanene, og trykk «Kopier til samlingen» når du er fornøyd.")
   );

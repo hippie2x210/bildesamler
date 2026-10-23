@@ -60,6 +60,7 @@ pub fn les(sti: &Path) -> Result<Fil> {
         datokilde: Datokilde::Ingen,
         tillit: Tillit::Ingen,
         advarsler: Vec::new(),
+        i_samlingen: false,
     };
 
     match medietype {

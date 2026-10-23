@@ -29,6 +29,7 @@ pub struct Handling {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Rapport {
+    /// Nye filer fra kildene. Bilder som allerede er i samlingen telles ikke.
     pub filer: usize,
     /// Originaler med dato. Filer uten dato telles bare i `uten_dato`.
     pub bilder: usize,
@@ -42,6 +43,12 @@ pub struct Rapport {
     /// De er byte for byte like originalen, så de kopieres ikke.
     #[serde(default)]
     pub takeout_albumkopier: usize,
+    /// Filer som ligger i samlingen fra før med nøyaktig samme innhold. De kopieres ikke igjen.
+    #[serde(default)]
+    pub allerede_i_samlingen: usize,
+    /// Hvor mye som skal kopieres, så appen kan sjekke at det er plass.
+    #[serde(default)]
+    pub bytes_a_kopiere: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -53,10 +60,24 @@ pub struct Plan {
     pub rapport: Rapport,
     /// Filer som ikke kunne leses, med feilmelding.
     pub ulesbare: Vec<(PathBuf, String)>,
+    /// Sjekksummen til alt som allerede ligger i samlingen.
+    #[serde(default)]
+    pub samling_sha: HashSet<String>,
 }
 
 impl Plan {
     pub fn ny(mal: &Path, filer: Vec<Fil>, grupper: Vec<Gruppe>, ulesbare: Vec<(PathBuf, String)>) -> Self {
+        Self::med_samling(mal, filer, grupper, ulesbare, HashSet::new())
+    }
+
+    /// Som `ny`, men vet hva som ligger i samlingen fra før. Filer med `i_samlingen` kopieres aldri.
+    pub fn med_samling(
+        mal: &Path,
+        filer: Vec<Fil>,
+        grupper: Vec<Gruppe>,
+        ulesbare: Vec<(PathBuf, String)>,
+        samling_sha: HashSet<String>,
+    ) -> Self {
         let mut plan = Plan {
             mal: mal.to_path_buf(),
             filer,
@@ -64,6 +85,7 @@ impl Plan {
             handlinger: Vec::new(),
             rapport: Rapport::default(),
             ulesbare,
+            samling_sha,
         };
         plan.bygg();
         plan
@@ -108,9 +130,18 @@ impl Plan {
 
         let mut brukt = HashSet::new();
         let mut handlinger = Vec::with_capacity(self.filer.len());
-        let mut r = Rapport { filer: self.filer.len(), ulesbare: self.ulesbare.len(), ..Default::default() };
+        let nye = self.filer.iter().filter(|f| !f.i_samlingen).count();
+        let mut r = Rapport { filer: nye, ulesbare: self.ulesbare.len(), ..Default::default() };
 
         for (i, f) in self.filer.iter().enumerate() {
+            // Det som er i samlingen fra før, blir liggende der det er.
+            if f.i_samlingen {
+                continue;
+            }
+            if self.samling_sha.contains(&f.sha256) {
+                r.allerede_i_samlingen += 1;
+                continue;
+            }
             if let Some(o) = original_for[i] {
                 let o = &self.filer[o];
                 if o.sha256 == f.sha256 && fra_takeout(&f.sti) && fra_takeout(&o.sti) {
@@ -155,6 +186,7 @@ impl Plan {
             if !f.advarsler.is_empty() {
                 r.med_advarsel += 1;
             }
+            r.bytes_a_kopiere += f.storrelse;
             let til = ledig_navn(&mappe, &navn, &mut brukt);
             handlinger.push(Handling { fil: i, til, rolle, gruppe: gruppe_for[i] });
         }

@@ -27,6 +27,7 @@ Er EXIF og filnavn uenige med mer enn et døgn, vises en advarsel.
 - **Helt like filer** gjenkjennes på SHA-256.
 - **Samme bilde i annen størrelse eller kvalitet** (for eksempel fra WhatsApp) gjenkjennes med en perseptuell hash.
 - Serieopptak med ulik opptakstid og beskårne versjoner regnes ikke som duplikater.
+- Bildene som allerede ligger i samlingen fra en tidligere kjøring, er med i sammenligningen. Et bilde som finnes fra før, havner i `Duplikater` (eller hoppes over hvis det er helt likt), ikke i `Bilder` en gang til. Det som er lest, huskes i `.cloudjumper/samling.json`.
 
 Originalen er den med sikrest dato, deretter kameradata, GPS, oppløsning og filstørrelse. Du kan velge en annen i fanen «Duplikater».
 

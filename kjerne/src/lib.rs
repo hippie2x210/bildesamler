@@ -7,6 +7,7 @@ pub mod metadata;
 pub mod miniatyr;
 pub mod modell;
 pub mod plan;
+pub mod samling;
 pub mod takeout;
 pub mod utfor;
 
@@ -42,7 +43,10 @@ pub fn finn_filer(kilder: &[PathBuf], mal: &Path) -> Vec<PathBuf> {
 }
 
 /// Skanner kildene og lager en plan (tørrkjøring). Ingen filer endres.
+/// Bildene som allerede ligger i samlingen tas med i sammenligningen, så en ny kilde ikke gir duplikater i `Bilder`.
 pub fn lag_plan(kilder: &[PathBuf], mal: &Path, fremdrift: &(dyn Fn(usize, usize) + Sync)) -> Plan {
+    takeout::glem_mapper();
+    let samling = samling::les(mal, fremdrift);
     let stier = finn_filer(kilder, mal);
     let ferdig = AtomicUsize::new(0);
     let total = stier.len();
@@ -63,6 +67,7 @@ pub fn lag_plan(kilder: &[PathBuf], mal: &Path, fremdrift: &(dyn Fn(usize, usize
             Err(e) => ulesbare.push((sti, format!("{e:#}"))),
         }
     }
+    filer.extend(samling.originaler);
     let grupper = likhet::grupper(&filer);
-    Plan::ny(mal, filer, grupper, ulesbare)
+    Plan::med_samling(mal, filer, grupper, ulesbare, samling.sha)
 }
