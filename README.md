@@ -11,7 +11,8 @@ Samling/
   Duplikater/2019/07/IMG-20190704-WA0001.jpg   (dårligere kopier av bilder som er beholdt)
   Uten dato/bilde1.jpg                          (ingen dato vi kan stole på)
   _Angret/…                                     (kopier som er angret, flyttes hit)
-  .bildesamler/logg/…                           (logg over hver kopiering, brukes av «Angre»)
+  .cloudjumper/logg/…                          (logg over hver kopiering, brukes av «Angre»)
+  .cloudjumper/takeout/…                       (Google Takeout pakket ut; sorterte bilder flyttes herfra, zip-filen røres ikke)
 ```
 
 ## Hvordan datoen velges
@@ -27,6 +28,7 @@ Er EXIF og filnavn uenige med mer enn et døgn, vises en advarsel.
 - **Helt like filer** gjenkjennes på SHA-256.
 - **Samme bilde i annen størrelse eller kvalitet** (for eksempel fra WhatsApp) gjenkjennes med en perseptuell hash.
 - Serieopptak med ulik opptakstid og beskårne versjoner regnes ikke som duplikater.
+- Bildene som allerede ligger i samlingen fra en tidligere kjøring, er med i sammenligningen. Et bilde som finnes fra før, havner i `Duplikater` (eller hoppes over hvis det er helt likt), ikke i `Bilder` en gang til. Det som er lest, huskes i `.cloudjumper/samling.json`.
 
 Originalen er den med sikrest dato, deretter kameradata, GPS, oppløsning og filstørrelse. Du kan velge en annen i fanen «Duplikater».
 
@@ -40,7 +42,7 @@ Originalen er den med sikrest dato, deretter kameradata, GPS, oppløsning og fil
 | `testdata/` | Testbilder og `fasit.csv`, laget av `tools/lag_testbilder.py` |
 
 ```sh
-cargo test -p bildesamler-kjerne --release   # test mot fasiten
+cargo test -p cloudjumper-kjerne --release   # test mot fasiten
 cd app && npm ci && npx tauri dev            # kjør appen
 cd app && npx tauri build                    # lag Windows-installasjon
 ```

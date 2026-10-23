@@ -41,6 +41,15 @@ function visFeil(melding) {
   $("varsler").replaceChildren(el("div", { class: "feil" }, String(melding)));
 }
 
+// Flere varsler samles i én gul boks i stedet for en lang rekke.
+function visVarsler(varsler) {
+  if (!varsler.length) return $("varsler").replaceChildren();
+  const boks = el("div", { class: "varsel" });
+  if (varsler.length === 1) boks.append(varsler[0]);
+  else boks.append(el("ul", {}, varsler.map((v) => el("li", {}, v))));
+  $("varsler").replaceChildren(boks);
+}
+
 // --- Mapper ---
 
 function kilder() { return [...$("kilder").options].map((o) => o.value); }
@@ -52,6 +61,17 @@ function settKilder(liste) {
 
 $("leggTilKilde").addEventListener("click", async () => {
   const valgt = await open({ directory: true, multiple: true, title: "Velg mapper med bilder" });
+  if (!valgt) return;
+  const nye = Array.isArray(valgt) ? valgt : [valgt];
+  settKilder([...new Set([...kilder(), ...nye])]);
+});
+
+$("leggTilTakeout").addEventListener("click", async () => {
+  const valgt = await open({
+    multiple: true,
+    title: "Velg Takeout-zip-filer fra Google Foto",
+    filters: [{ name: "Google Takeout", extensions: ["zip"] }],
+  });
   if (!valgt) return;
   const nye = Array.isArray(valgt) ? valgt : [valgt];
   settKilder([...new Set([...kilder(), ...nye])]);
@@ -75,13 +95,13 @@ $("velgMal").addEventListener("click", async () => {
 listen("fremdrift", ({ payload }) => {
   const { fase, ferdig, total } = payload;
   $("fremdrift").hidden = false;
-  const tekst = fase === "skanner" ? "Leser filer" : "Kopierer";
+  const tekst = { skanner: "Leser filer", "pakker ut": "Pakker ut Google Takeout" }[fase] ?? "Kopierer";
   $("fremdriftTekst").textContent = `${tekst}: ${ferdig} av ${total}`;
   $("fremdriftLinje").style.width = total ? `${(100 * ferdig) / total}%` : "0";
 });
 
 function opptatt(ja) {
-  for (const id of ["skann", "kopier", "angre", "leggTilKilde", "fjernKilde", "velgMal"]) {
+  for (const id of ["skann", "kopier", "angre", "leggTilKilde", "leggTilTakeout", "fjernKilde", "velgMal"]) {
     $(id).disabled = ja || (id === "kopier" && !oversikt);
   }
 }
@@ -119,7 +139,7 @@ $("skann").addEventListener("click", async () => {
 $("kopier").addEventListener("click", async () => {
   const r = oversikt.rapport;
   const ok = await sporBruker(
-    `Kopiere ${r.filer} filer til ${$("mal").value}?\n\n` +
+    `Kopiere ${r.bilder + r.videoer + r.duplikater + r.uten_dato} filer til ${$("mal").value}?\n\n` +
       `${r.duplikater} duplikater legges i «Duplikater». Originalene blir liggende der de er.`,
     { title: "Kopier til samlingen", kind: "info", okLabel: "Kopier", cancelLabel: "Avbryt" }
   );
@@ -178,11 +198,15 @@ function visResultat() {
   $("resultat").hidden = false;
   $("kopier").disabled = false;
 
-  const varsler = o.varsler.map((v) => el("div", { class: "varsel" }, v));
-  if (o.ulesbare.length) {
-    varsler.push(el("div", { class: "varsel" }, `${o.ulesbare.length} filer kunne ikke leses og blir ikke kopiert.`));
+  const varsler = [...o.varsler];
+  if (o.ulesbare.length) varsler.push(`${o.ulesbare.length} filer kunne ikke leses og blir ikke kopiert.`);
+  visVarsler(varsler);
+  const r0 = o.rapport;
+  const antallPaa = { duplikater: r0.duplikater, utenDato: r0.uten_dato, advarsler: r0.med_advarsel };
+  for (const fane of document.querySelectorAll('[role="tab"]')) {
+    const n = antallPaa[fane.dataset.fane];
+    fane.textContent = fane.textContent.replace(/ \(\d+\)$/, "") + (n ? ` (${n})` : "");
   }
-  $("varsler").replaceChildren(...varsler);
 
   const r = o.rapport;
   const rad = (t, v) => el("tr", {}, el("td", {}, t), el("td", {}, v));
@@ -194,7 +218,9 @@ function visResultat() {
       rad("Duplikater (legges i «Duplikater»)", `${r.duplikater} (${storrelse(r.duplikat_bytes)})`),
       rad("Uten sikker dato (legges i «Uten dato»)", r.uten_dato),
       rad("Filer med advarsel", r.med_advarsel),
-      rad("Kunne ikke leses", r.ulesbare)
+      rad("Kunne ikke leses", r.ulesbare),
+      rad("Like kopier i Google-album (kopieres ikke)", r.takeout_albumkopier ?? 0),
+      rad("Finnes allerede i samlingen (kopieres ikke)", r.allerede_i_samlingen ?? 0)
     ),
     el("p", { class: "hint" }, "Ingenting er kopiert ennå. Se gjennom fanene, og trykk «Kopier til samlingen» når du er fornøyd.")
   );
@@ -204,9 +230,14 @@ function visResultat() {
   $("advarsler").replaceChildren(filTabell(o.advarsler, "Ingen advarsler."));
 }
 
+// Videoer og bilder som ikke kan leses får ingen forhåndsvisning, bare en grå flate.
+function skjulBilde(e) {
+  e.target.style.visibility = "hidden";
+}
+
 function kort(f, gruppe, erOriginal) {
   return el("div", { class: "kort" + (erOriginal ? " original" : "") },
-    el("img", { src: convertFileSrc(f.sti), loading: "lazy", alt: f.navn }),
+    el("img", { src: convertFileSrc(f.sti, "mini"), loading: "lazy", decoding: "async", alt: f.navn, onerror: skjulBilde }),
     el("div", { class: "info" },
       el("b", {}, f.navn), el("br"),
       `${f.bredde}×${f.hoyde}, ${storrelse(f.storrelse)}`, el("br"),
@@ -251,18 +282,35 @@ async function velgOriginal(gruppe, fil) {
   }
 }
 
-function filTabell(filer, tom) {
+// «C:\...\.cloudjumper\takeout\takeout-…\Takeout\Google Foto\Bilder fra 2019» → «Google Foto › Bilder fra 2019».
+function kortMappe(sti) {
+  const deler = sti.split(/[\\/]/);
+  deler.pop();
+  const foto = deler.findIndex((d) => /^google (photo|foto)/i.test(d));
+  const synlige = foto >= 0 ? deler.slice(foto) : deler.slice(-2);
+  return synlige.join(" › ");
+}
+
+const RADER = 100;
+
+function filTabell(filer, tom, vis = RADER) {
   if (!filer.length) return el("p", {}, tom);
-  return el("table", { class: "liste" },
-    el("tr", {}, el("th", {}, "Fil"), el("th", {}, "Dato"), el("th", {}, "Merknad")),
-    filer.map((f) =>
+  const tabell = el("table", { class: "liste" },
+    el("tr", {}, el("th", {}, ""), el("th", {}, "Fil"), el("th", {}, "Dato"), el("th", {}, "Merknad")),
+    filer.slice(0, vis).map((f) =>
       el("tr", {},
-        el("td", {}, f.sti),
+        el("td", { class: "mini" }, el("img", { src: convertFileSrc(f.sti, "mini"), loading: "lazy", decoding: "async", alt: "", onerror: skjulBilde })),
+        el("td", { title: f.sti }, el("b", {}, f.navn), el("br"), el("span", { class: "mappe" }, kortMappe(f.sti))),
         el("td", {}, f.dato ?? "–"),
         el("td", {}, f.advarsler.join(" "))
       )
     )
   );
+  if (vis >= filer.length) return tabell;
+  const flere = el("button", {}, `Vis flere (${filer.length - vis} til)`);
+  const boks = el("div", {}, tabell, flere);
+  flere.addEventListener("click", () => boks.replaceWith(filTabell(filer, tom, vis + RADER)));
+  return boks;
 }
 
 // --- Oppstart ---

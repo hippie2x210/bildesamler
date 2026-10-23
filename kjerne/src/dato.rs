@@ -65,6 +65,21 @@ pub fn velg(fil: &mut Fil) {
             };
             (Some(m), kilde, Tillit::Hoy)
         }
+        (None, f) if fil.takeout_dato.is_some_and(sannsynlig) => {
+            let t = fil.takeout_dato.unwrap();
+            match f {
+                // Uten EXIF er Googles dato ofte opplastingstiden. Da stoler vi mer på filnavnet.
+                Some(f) if (t - f).num_hours().abs() > 24 => {
+                    fil.advarsler.push(format!(
+                        "Google Foto sier {}, men filnavnet sier {}. Bruker filnavnet",
+                        t.date(),
+                        f.date()
+                    ));
+                    (Some(f), Datokilde::Filnavn, Tillit::Middels)
+                }
+                _ => (Some(t), Datokilde::Takeout, Tillit::Middels),
+            }
+        }
         (None, Some(f)) => (Some(f), Datokilde::Filnavn, Tillit::Middels),
         (None, None) => {
             if let Some(f) = fil.fildato {
@@ -104,6 +119,46 @@ mod tester {
         assert_eq!(fra_filnavn("DSC_9000.JPG"), None);
         assert_eq!(fra_filnavn("bilde_20191340.jpg"), None);
         assert_eq!(fra_filnavn("P1234567890123.jpg"), None);
+    }
+
+    fn fil(metadata: Option<&str>, filnavn: Option<&str>, takeout: Option<&str>) -> Fil {
+        Fil {
+            sti: "x.jpg".into(),
+            storrelse: 0,
+            sha256: String::new(),
+            phash: None,
+            bredde: 0,
+            hoyde: 0,
+            medietype: Medietype::Bilde,
+            kamera: None,
+            har_gps: false,
+            metadata_dato: metadata.map(d),
+            filnavn_dato: filnavn.map(d),
+            takeout_dato: takeout.map(d),
+            fildato: None,
+            dato: None,
+            datokilde: Datokilde::Ingen,
+            tillit: Tillit::Ingen,
+            advarsler: Vec::new(),
+            i_samlingen: false,
+        }
+    }
+
+    #[test]
+    fn takeout_dato_brukes_uten_exif() {
+        let mut f = fil(None, None, Some("2018-05-17 10:00:00"));
+        velg(&mut f);
+        assert_eq!((f.dato, f.datokilde), (Some(d("2018-05-17 10:00:00")), Datokilde::Takeout));
+
+        let mut f = fil(Some("2017-01-02 03:04:05"), None, Some("2018-05-17 10:00:00"));
+        velg(&mut f);
+        assert_eq!(f.datokilde, Datokilde::Exif);
+
+        // WhatsApp-bilde lastet opp senere: filnavnet vinner, med advarsel.
+        let mut f = fil(None, Some("2016-07-04 12:00:00"), Some("2021-03-01 09:00:00"));
+        velg(&mut f);
+        assert_eq!((f.dato, f.datokilde), (Some(d("2016-07-04 12:00:00")), Datokilde::Filnavn));
+        assert_eq!(f.advarsler.len(), 1);
     }
 
     #[test]

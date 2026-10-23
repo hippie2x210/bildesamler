@@ -14,6 +14,8 @@ pub enum Datokilde {
     Exif,
     Video,
     Filnavn,
+    /// Datoen Google Foto har lagret i Takeout-JSON-filen.
+    Takeout,
     Ingen,
 }
 
@@ -39,12 +41,18 @@ pub struct Fil {
     pub har_gps: bool,
     pub metadata_dato: Option<NaiveDateTime>,
     pub filnavn_dato: Option<NaiveDateTime>,
+    /// Datoen fra Google Takeout sin JSON-fil, hvis bildet kom fra Takeout.
+    #[serde(default)]
+    pub takeout_dato: Option<NaiveDateTime>,
     /// Endringstid fra filsystemet. Brukes aldri automatisk, bare som forslag.
     pub fildato: Option<NaiveDateTime>,
     pub dato: Option<NaiveDateTime>,
     pub datokilde: Datokilde,
     pub tillit: Tillit,
     pub advarsler: Vec<String>,
+    /// Ligger allerede i samlingen fra en tidligere kjøring. Kopieres aldri, men brukes til å finne duplikater.
+    #[serde(default)]
+    pub i_samlingen: bool,
 }
 
 impl Fil {
