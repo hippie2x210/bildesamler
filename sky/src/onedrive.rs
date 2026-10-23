@@ -225,17 +225,26 @@ pub fn liste(klient: &Klient) -> Result<Vec<Element>> {
     Ok(tolk_delta(&alle))
 }
 
-/// Laster ned én fil. Fortsetter fra der en avbrutt nedlasting slapp.
+/// Laster ned én fil. Fortsetter fra der en avbrutt nedlasting slapp, og venter litt lenger for hvert brudd.
+/// Filen godtas bare når den er like stor som Microsoft sa den skulle bli, og quickXorHash stemmer.
+/// En fil som er satt sammen feil, blir aldri lagt i mappen som sorteres.
 fn last_ned(tilgang: &str, e: &Element, til: &Path) -> Result<()> {
     let tmp = til.with_extension("cloudjumper-del");
-    for _ in 0..FORSOK {
+    let mut sist = String::from("ukjent feil");
+    for forsok in 0..FORSOK {
+        if forsok > 0 {
+            std::thread::sleep(Duration::from_secs(5 << forsok.min(5)));
+        }
         // Nedlastingslenken varer bare noen minutter, så den hentes rett før hver runde.
         let info = hent_json(tilgang, &format!("{GRAPH}/me/drive/items/{}?$select=@microsoft.graph.downloadUrl", e.id))?;
         let lenke = info["@microsoft.graph.downloadUrl"].as_str().context("OneDrive ga ingen nedlastingslenke")?;
         let start = fs::metadata(&tmp).map(|m| m.len()).unwrap_or(0);
-        if start >= e.storrelse && e.storrelse > 0 {
-            fs::rename(&tmp, til)?;
-            return Ok(());
+        if start > 0 && start == e.storrelse {
+            if kontroller(e, &tmp)? {
+                fs::rename(&tmp, til)?;
+                return Ok(());
+            }
+            continue;
         }
         let mut r = agent().get(lenke);
         if start > 0 {
@@ -248,28 +257,63 @@ fn last_ned(tilgang: &str, e: &Element, til: &Path) -> Result<()> {
                 let _ = fs::remove_file(&tmp);
                 continue;
             }
-            Err(ureq::Error::Transport(_)) => continue,
+            Err(ureq::Error::Transport(t)) => {
+                sist = t.to_string();
+                continue;
+            }
             Err(err) => return Err(http_feil(err)),
         };
         let fortsetter = svar.status() == 206;
+        // Hele filens lengde: «bytes 100-999/1000» ved fortsettelse, ellers Content-Length.
+        let ventet = if fortsetter {
+            svar.header("Content-Range").and_then(|v| v.rsplit('/').next()).and_then(|t| t.parse::<u64>().ok())
+        } else {
+            svar.header("Content-Length").and_then(|v| v.parse::<u64>().ok())
+        };
         let mut ut = fs::OpenOptions::new().create(true).write(true).append(fortsetter).truncate(!fortsetter).open(&tmp)?;
         let mut kilde = svar.into_reader();
         let mut buf = vec![0u8; 1 << 20];
-        let ok = loop {
+        let lest_alt = loop {
             match kilde.read(&mut buf) {
                 Ok(0) => break true,
                 Ok(n) => ut.write_all(&buf[..n])?,
-                Err(_) => break false,
+                Err(feil) => {
+                    sist = feil.to_string();
+                    break false;
+                }
             }
         };
         ut.flush()?;
-        if ok {
+        drop(ut);
+        let lengde = fs::metadata(&tmp)?.len();
+        // Forbindelsen kan lukkes pent før filen er ferdig. Da er filen ikke hel, og vi fortsetter neste runde.
+        if !lest_alt || ventet.is_some_and(|v| lengde < v) {
+            if lest_alt {
+                sist = format!("fikk {lengde} av {} byte", ventet.unwrap_or(0));
+            }
+            continue;
+        }
+        if kontroller(e, &tmp)? {
             fs::rename(&tmp, til)?;
             return Ok(());
         }
+        sist = "sjekksummen stemte ikke".into();
     }
     // Den halve filen blir liggende, så neste forsøk fortsetter der det stoppet.
-    bail!("nedlastingen stoppet flere ganger")
+    bail!("nedlastingen stoppet flere ganger ({sist})")
+}
+
+/// Stemmer sjekksummen? Hvis ikke, er filen satt sammen av to versjoner (endret i OneDrive mens vi
+/// lastet ned), og vår egen halvferdige fil fjernes så neste runde begynner på nytt.
+/// Live Photos lastes ned som bare stillbildet; der stemmer verken størrelse eller sjekksum, og filen godtas.
+fn kontroller(e: &Element, tmp: &Path) -> Result<bool> {
+    let lengde = fs::metadata(tmp)?.len();
+    let Some(ventet) = e.quick_xor.as_deref().filter(|_| lengde == e.storrelse) else { return Ok(true) };
+    if crate::quickxor::for_fil(tmp)? == ventet {
+        return Ok(true);
+    }
+    let _ = fs::remove_file(tmp);
+    Ok(false)
 }
 
 /// Laster ned alle bilder og videoer til `mal`, med samme mappestruktur som i OneDrive.
