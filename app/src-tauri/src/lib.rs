@@ -95,8 +95,9 @@ fn oversikt(plan: &Plan) -> Oversikt {
                 .collect(),
         })
         .collect();
+    // Bilder som allerede er i samlingen, er vist før og gjentas ikke.
     let advarsler = (0..plan.filer.len())
-        .filter(|&i| !plan.filer[i].advarsler.is_empty())
+        .filter(|&i| !plan.filer[i].advarsler.is_empty() && !plan.filer[i].i_samlingen)
         .map(|i| fil_visning(plan, i))
         .collect();
     let uten_dato = plan
@@ -115,13 +116,27 @@ fn oversikt(plan: &Plan) -> Oversikt {
             .iter()
             .map(|(s, e)| (s.to_string_lossy().into_owned(), e.clone()))
             .collect(),
-        varsler: varsler_for_mal(&plan.mal),
+        varsler: varsler_for_mal(&plan.mal, plan.rapport.bytes_a_kopiere),
     }
 }
 
-/// Advarer hvis målet synkes til skyen: da lastes hele samlingen opp igjen.
-fn varsler_for_mal(mal: &Path) -> Vec<String> {
+fn gb(bytes: u64) -> String {
+    format!("{:.1} GB", bytes as f64 / 1e9).replace('.', ",")
+}
+
+/// Advarer hvis det ikke er plass, eller hvis målet synkes til skyen: da lastes hele samlingen opp igjen.
+fn varsler_for_mal(mal: &Path, trengs: u64) -> Vec<String> {
     let mut v = Vec::new();
+    // Litt luft til mapper og loggen, så disken ikke blir helt full.
+    if let Some(ledig) = utfor::ledig_plass(mal) {
+        if trengs + 200_000_000 > ledig {
+            v.push(format!(
+                "Det er ikke nok plass. Kopiene trenger {}, men det er bare {} ledig der samlingen skal ligge. Velg en større disk, eller rydd plass først.",
+                gb(trengs),
+                gb(ledig)
+            ));
+        }
+    }
     for var in ["OneDrive", "OneDriveConsumer", "OneDriveCommercial"] {
         if let Some(rot) = std::env::var_os(var) {
             if !rot.is_empty() && mal.starts_with(&rot) {

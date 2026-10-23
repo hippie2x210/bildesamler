@@ -263,9 +263,14 @@ function visFunn() {
     r.takeout_albumkopier
       ? `${antall(r.takeout_albumkopier, "bilde", "bilder")} lå i flere Google-album og kopieres bare én gang`
       : null,
+    r.allerede_i_samlingen
+      ? `${antall(r.allerede_i_samlingen, "bilde", "bilder")} er allerede i samlingen og hoppes over`
+      : null,
   ].filter(Boolean);
   $("vvFunn").replaceChildren(...linjer.map((l) => el("li", {}, l)));
-  $("vvKopier").disabled = r.filer === 0;
+  const nytt = r.bilder + r.videoer + r.duplikater + r.uten_dato;
+  if (!nytt) $("vvFunn").append(el("li", {}, "Ingenting nytt å kopiere. Alt er allerede i samlingen."));
+  $("vvKopier").disabled = nytt === 0;
   visSteg("klar");
   const varsler = oversikt.varsler;
   $("vvVarsler").hidden = !varsler.length;

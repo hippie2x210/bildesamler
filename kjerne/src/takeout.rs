@@ -5,7 +5,9 @@ use anyhow::{Context, Result};
 use chrono::{DateTime, Local, NaiveDateTime};
 use std::fs;
 use std::io;
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use crate::metadata;
 
@@ -223,16 +225,11 @@ pub fn finn_sidecar(sti: &Path) -> Option<PathBuf> {
         kandidater.push(original);
     }
 
-    let jsonfiler: Vec<String> = fs::read_dir(mappe)
-        .ok()?
-        .filter_map(Result::ok)
-        .map(|e| e.file_name().to_string_lossy().into_owned())
-        .filter(|n| n.to_lowercase().ends_with(".json"))
-        .collect();
+    let json = jsonfiler(mappe)?;
 
     for kandidat in &kandidater {
         let fullt = format!("{kandidat}.supplemental-metadata");
-        let beste = jsonfiler
+        let beste = json
             .iter()
             .filter_map(|j| {
                 let (stamme, j_teller) = skill_ut_teller(&j[..j.len() - 5]);
@@ -248,6 +245,36 @@ pub fn finn_sidecar(sti: &Path) -> Option<PathBuf> {
         }
     }
     None
+}
+
+type Mapper = Mutex<HashMap<PathBuf, Arc<Vec<String>>>>;
+
+/// JSON-filene i hver mappe. En Takeout-mappe kan ha titusenvis av filer, og uten dette ble
+/// hele mappen lest én gang for hvert bilde i den.
+fn mapper() -> &'static Mapper {
+    static M: OnceLock<Mapper> = OnceLock::new();
+    M.get_or_init(Default::default)
+}
+
+/// Glemmer mappene som er lest, så en ny skanning ser filer som har kommet til siden sist.
+pub fn glem_mapper() {
+    mapper().lock().unwrap().clear();
+}
+
+fn jsonfiler(mappe: &Path) -> Option<Arc<Vec<String>>> {
+    if let Some(l) = mapper().lock().unwrap().get(mappe) {
+        return Some(l.clone());
+    }
+    let liste: Arc<Vec<String>> = Arc::new(
+        fs::read_dir(mappe)
+            .ok()?
+            .filter_map(Result::ok)
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .filter(|n| n.to_lowercase().ends_with(".json"))
+            .collect(),
+    );
+    mapper().lock().unwrap().insert(mappe.to_path_buf(), liste.clone());
+    Some(liste)
 }
 
 /// `IMG_1(2).jpg` → (`IMG_1.jpg`, Some(2)). `IMG_1.jpg(2)` → (`IMG_1.jpg`, Some(2)).
