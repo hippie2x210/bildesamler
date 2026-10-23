@@ -12,6 +12,7 @@ Samling/
   Uten dato/bilde1.jpg                          (ingen dato vi kan stole på)
   _Angret/…                                     (kopier som er angret, flyttes hit)
   .cloudjumper/logg/…                          (logg over hver kopiering, brukes av «Angre»)
+  .cloudjumper/takeout/…                       (Google Takeout pakket ut; sorterte bilder flyttes herfra, zip-filen røres ikke)
 ```
 
 ## Hvordan datoen velges

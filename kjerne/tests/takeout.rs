@@ -1,6 +1,6 @@
 //! Hele veien for en Google Takeout-zip: utpakking, dato fra JSON, sortering og albumkopier.
 
-use cloudjumper_kjerne::{lag_plan, modell::Datokilde, plan::Rolle, takeout};
+use cloudjumper_kjerne::{lag_plan, modell::Datokilde, plan::Rolle, takeout, utfor};
 use std::fs;
 use std::io::{Cursor, Write};
 
@@ -47,4 +47,41 @@ fn takeout_zip_sorteres_med_googles_dato() {
     assert_eq!(h.rolle, Rolle::Original);
     assert!(h.til.starts_with("Bilder/2019/07"), "{:?}", h.til);
     assert_eq!(plan.filer[h.fil].datokilde, Datokilde::Takeout);
+}
+
+#[test]
+fn takeout_bilder_flyttes_og_pakkes_ikke_ut_igjen() {
+    let d = tempfile::tempdir().unwrap();
+    let nedlastet = d.path().join("Nedlastinger");
+    fs::create_dir_all(&nedlastet).unwrap();
+    let zipsti = nedlastet.join("takeout-20261022T120000Z-001.zip");
+    let mut z = zip::ZipWriter::new(fs::File::create(&zipsti).unwrap());
+    z.start_file("Takeout/Google Foto/Photos from 2019/IMG_20190704_120000.jpg", zip::write::SimpleFileOptions::default())
+        .unwrap();
+    z.write_all(&jpeg(90)).unwrap();
+    z.finish().unwrap();
+    let zip_foer = fs::read(&zipsti).unwrap();
+
+    let mal = d.path().join("Samling");
+    let utpakket = mal.join(".cloudjumper/takeout/takeout-20261022T120000Z-001/Takeout/Google Foto/Photos from 2019/IMG_20190704_120000.jpg");
+    let (kilder, _) = takeout::forbered_kilder(&[nedlastet.clone()], &mal, &|_, _| {});
+    let plan = lag_plan(&kilder, &mal, &|_, _| {});
+    assert!(utpakket.exists());
+    assert_eq!(utfor::utfor(&plan, &|_, _| {}).unwrap().kopiert, 1);
+
+    // Bildet ligger én gang i samlingen, ikke også i den utpakkede mappen. Zip-en er urørt.
+    let i_samlingen = mal.join("Bilder/2019/07/IMG_20190704_120000.jpg");
+    assert!(i_samlingen.exists());
+    assert!(!utpakket.exists());
+    assert_eq!(fs::read(&zipsti).unwrap(), zip_foer);
+
+    // Neste skanning pakker ikke ut på nytt og finner ingenting nytt.
+    let (kilder, _) = takeout::forbered_kilder(&[nedlastet], &mal, &|_, _| {});
+    assert!(!utpakket.exists());
+    assert!(lag_plan(&kilder, &mal, &|_, _| {}).handlinger.is_empty());
+
+    // Angre legger bildet tilbake i den utpakkede mappen.
+    assert_eq!(utfor::angre_siste(&mal).unwrap(), 1);
+    assert!(utpakket.exists());
+    assert!(!i_samlingen.exists());
 }

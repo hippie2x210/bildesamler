@@ -14,6 +14,9 @@ use crate::metadata;
 /// Mappe under samlingens loggmappe der Takeout-zip-er pakkes ut.
 pub const UTPAKKET: &str = "takeout";
 
+/// Merke i en utpakket mappe om at hele zip-en er pakket ut. Inneholder zip-ens størrelse.
+const FERDIG: &str = "cloudjumper-ferdig.txt";
+
 pub fn er_zip(sti: &Path) -> bool {
     sti.extension().is_some_and(|e| e.eq_ignore_ascii_case("zip"))
 }
@@ -186,8 +189,18 @@ pub fn forbered_kilder(
         fremdrift(i, zipper.len());
         let stamme = zip.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
         let mappe = rot.join(stamme);
+        // Bilder som er sortert, er flyttet ut av mappen. En ferdig zip pakkes derfor ikke ut igjen.
+        let merke = mappe.join(FERDIG);
+        let storrelse = fs::metadata(zip).map(|m| m.len().to_string()).unwrap_or_default();
+        if fs::read_to_string(&merke).is_ok_and(|s| s.trim() == storrelse) {
+            nye.extend(foto_mapper(&mappe));
+            continue;
+        }
         match pakk_ut(zip, &mappe) {
-            Ok(_) => nye.extend(foto_mapper(&mappe)),
+            Ok(_) => {
+                let _ = fs::write(&merke, &storrelse);
+                nye.extend(foto_mapper(&mappe))
+            }
             Err(e) => varsler.push(format!("{e:#}")),
         }
     }
