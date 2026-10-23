@@ -30,6 +30,10 @@ pub struct Logglinje {
     /// Relativ til målmappen.
     pub til: PathBuf,
     pub sha256: String,
+    /// Filen ble flyttet fra CloudJumper sin egen utpakkede Takeout-mappe, ikke kopiert.
+    /// «Angre» flytter den da tilbake dit.
+    #[serde(default)]
+    pub flyttet: bool,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -46,14 +50,24 @@ pub fn utfor(plan: &Plan, fremdrift: &dyn Fn(usize, usize)) -> Result<Resultat> 
     fs::create_dir_all(&loggmappe).context("kunne ikke lage loggmappe i målet")?;
     let (loggsti, mut logg) = ny_logg(&loggmappe)?;
     let mut res = Resultat { logg: Some(loggsti), ..Default::default() };
+    // På telefonen skal ikke duplikatene dukke opp i Galleri som ekstra kopier av hvert bilde.
+    #[cfg(target_os = "android")]
+    if plan.handlinger.iter().any(|h| h.rolle == crate::plan::Rolle::Duplikat) {
+        let mappe = plan.mal.join(crate::plan::MAPPE_DUPLIKATER);
+        let _ = fs::create_dir_all(&mappe);
+        let _ = fs::File::options().write(true).create_new(true).open(mappe.join(".nomedia"));
+    }
 
     for (n, h) in plan.handlinger.iter().enumerate() {
         fremdrift(n, plan.handlinger.len());
         let fil = &plan.filer[h.fil];
-        match kopier_en(&fil.sti, &plan.mal, &h.til, &fil.sha256) {
+        // Bilder fra Takeout ligger fortsatt i zip-filen. Kopien vi pakket ut er vår egen og kan flyttes,
+        // så de ikke tar plass to ganger på disken.
+        let flytt = crate::plan::fra_takeout(&fil.sti);
+        match kopier_en(&fil.sti, &plan.mal, &h.til, &fil.sha256, flytt) {
             Ok(Some(til)) => {
                 res.kopiert += 1;
-                let linje = Logglinje { kilde: fil.sti.clone(), til, sha256: fil.sha256.clone() };
+                let linje = Logglinje { kilde: fil.sti.clone(), til, sha256: fil.sha256.clone(), flyttet: flytt };
                 writeln!(logg, "{}", serde_json::to_string(&linje)?)?;
                 logg.flush()?;
             }
@@ -84,7 +98,8 @@ fn ny_logg(mappe: &Path) -> Result<(PathBuf, fs::File)> {
 /// På Windows overskriver `rename` en fil som finnes. Derfor reserveres navnet først med en tom fil som
 /// bare kan lages hvis navnet er ledig, og kopien flyttes over den. Da kan ingen annen fil bli overskrevet,
 /// selv om noe dukker opp i mappen mens vi kopierer.
-fn kopier_en(kilde: &Path, mal: &Path, til: &Path, sha: &str) -> Result<Option<PathBuf>> {
+/// Med `flytt` flyttes filen i stedet for å kopieres. Det brukes bare for CloudJumper sine egne utpakkede filer.
+fn kopier_en(kilde: &Path, mal: &Path, til: &Path, sha: &str, flytt: bool) -> Result<Option<PathBuf>> {
     let (stamme, ext) = del_navn(til);
     if let Some(forelder) = mal.join(til).parent() {
         fs::create_dir_all(forelder)?;
@@ -110,7 +125,9 @@ fn kopier_en(kilde: &Path, mal: &Path, til: &Path, sha: &str) -> Result<Option<P
         }
     };
     let tmp = full.with_extension("cloudjumper-del");
-    let kopiert = fs::copy(kilde, &tmp)
+    let flyttet = flytt && fs::rename(kilde, &tmp).is_ok();
+    let kopiert = if flyttet { Ok(0) } else { fs::copy(kilde, &tmp) };
+    let kopiert = kopiert
         .with_context(|| format!("kopiering feilet: {}", kilde.display()))
         .and_then(|_| {
             if sha256_fil(&tmp)? != sha {
@@ -123,7 +140,7 @@ fn kopier_en(kilde: &Path, mal: &Path, til: &Path, sha: &str) -> Result<Option<P
         frigi(&full);
         return Err(e);
     }
-    if let Ok(m) = fs::metadata(kilde).and_then(|m| m.modified()) {
+    if let Ok(m) = fs::metadata(if flyttet { &tmp } else { kilde }).and_then(|m| m.modified()) {
         let _ = fs::File::options().write(true).open(&tmp).and_then(|f| f.set_modified(m));
     }
     // Erstatter bare den tomme plassholderen vi laget selv.
@@ -164,7 +181,8 @@ pub fn angre_siste(mal: &Path) -> Result<usize> {
         if !fra.exists() || sha256_fil(&fra)? != l.sha256 {
             continue;
         }
-        let til = angret.join(&l.til);
+        // En fil flyttet fra Takeout-mappen går tilbake dit, så den kan sorteres igjen senere.
+        let til = if l.flyttet && !l.kilde.exists() { l.kilde.clone() } else { angret.join(&l.til) };
         fs::create_dir_all(til.parent().unwrap())?;
         fs::rename(&fra, &til)?;
         flyttet += 1;
