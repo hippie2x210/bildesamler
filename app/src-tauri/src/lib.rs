@@ -1,6 +1,6 @@
 //! Skallet rundt kjernen: kommandoer grensesnittet kan kalle, og fremdrift tilbake.
 
-use cloudjumper_kjerne::{lag_plan, miniatyr, modell::{Datokilde, Tillit}, plan::Rolle, takeout, utfor, Plan};
+use cloudjumper_kjerne::{lag_plan, miniatyr, modell::{Datokilde, Tillit}, plan::Rolle, rapport, takeout, utfor, Plan};
 use cloudjumper_sky::{google, onedrive};
 use serde::Serialize;
 use std::path::{Path, PathBuf};
@@ -204,15 +204,18 @@ fn sett_original(tilstand: State<'_, Tilstand>, gruppe: usize, fil: usize) -> Re
 }
 
 #[tauri::command]
-async fn kopier(app: AppHandle, tilstand: State<'_, Tilstand>) -> Result<utfor::Resultat, String> {
+async fn kopier(app: AppHandle, tilstand: State<'_, Tilstand>, kilde: Option<String>) -> Result<utfor::Resultat, String> {
     let plan = tilstand.0.lock().unwrap().clone().ok_or("Skann først.")?;
     std::fs::create_dir_all(&plan.mal).map_err(|e| format!("Kunne ikke lage målmappen: {e}"))?;
     tauri::async_runtime::spawn_blocking(move || {
-        utfor::utfor(&plan, &|ferdig, total| {
+        let res = utfor::utfor(&plan, &|ferdig, total| {
             if ferdig % 10 == 0 || ferdig == total {
                 let _ = app.emit("fremdrift", Fremdrift { fase: "kopierer", ferdig, total });
             }
-        })
+        })?;
+        // Rapporten er en hjelp, ikke en del av kopieringen. Feiler den, er bildene likevel kopiert.
+        let _ = rapport::skriv(&plan, &res, kilde.as_deref().unwrap_or(""));
+        Ok::<_, anyhow::Error>(res)
     })
     .await
     .map_err(|e| e.to_string())?
@@ -250,7 +253,11 @@ async fn telefon_hent(app: AppHandle, id: String, navn: String, mal: String) -> 
 #[tauri::command]
 async fn angre(mal: String) -> Result<usize, String> {
     // Kan flytte mange filer, så det skjer utenfor hovedtråden og grensesnittet ikke fryser.
-    tauri::async_runtime::spawn_blocking(move || utfor::angre_siste(Path::new(&mal)))
+    tauri::async_runtime::spawn_blocking(move || {
+        let flyttet = utfor::angre_siste(Path::new(&mal))?;
+        let _ = rapport::skriv_angret(Path::new(&mal), flyttet);
+        Ok::<_, anyhow::Error>(flyttet)
+    })
         .await
         .map_err(|e| e.to_string())?
         .map_err(|e| format!("{e:#}"))
