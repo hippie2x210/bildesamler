@@ -40,6 +40,18 @@ pub fn lytt() -> Result<(TcpListener, String)> {
     Ok((lytter, format!("http://127.0.0.1:{port}")))
 }
 
+/// Lytter på en fast port på 127.0.0.1, for tjenester som krever at adressen er registrert på forhånd
+/// (Dropbox). Prøver neste port i lista hvis en er opptatt.
+pub fn lytt_paa(porter: &[u16]) -> Result<(TcpListener, String)> {
+    for &port in porter {
+        if let Ok(lytter) = TcpListener::bind(("127.0.0.1", port)) {
+            let port = lytter.local_addr()?.port();
+            return Ok((lytter, format!("http://localhost:{port}/")));
+        }
+    }
+    bail!("kunne ikke åpne en lokal port for innloggingen. Lukk andre programmer og prøv igjen")
+}
+
 /// Venter på at nettleseren kommer tilbake med `?code=...&state=...`, og svarer med en enkel side.
 pub fn vent_paa_kode(lytter: TcpListener, tilstand: &str) -> Result<String> {
     lytter.set_nonblocking(true)?;

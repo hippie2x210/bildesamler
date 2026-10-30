@@ -42,6 +42,11 @@ jobs:
       - name: Bygg installasjonsfil
         working-directory: app
         run: npx tauri build
+        # App-ID-ene er ikke hemmelige, men ligger som secrets så de kan byttes uten kodeendring.
+        # Mangler de, skjules OneDrive- og Dropbox-knappene. Se docs/skykontoer.md.
+        env:
+          CLOUDJUMPER_ONEDRIVE_KLIENT: ${{ secrets.CLOUDJUMPER_ONEDRIVE_KLIENT }}
+          CLOUDJUMPER_DROPBOX_NOKKEL: ${{ secrets.CLOUDJUMPER_DROPBOX_NOKKEL }}
       - uses: actions/upload-artifact@v4
         with:
           name: CloudJumper-Windows

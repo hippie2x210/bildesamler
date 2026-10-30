@@ -167,6 +167,18 @@ $("vvOneDriveLoggInn").addEventListener("click", () =>
   })
 );
 
+// --- Dropbox ---
+
+$("vvDropboxLoggInn").addEventListener("click", () =>
+  travel($("vvDropboxLoggInn"), "Venter på innlogging i nettleseren …", async () => {
+    const navn = await invoke("dropbox_logg_inn");
+    $("vvDropboxTekst").textContent = `Logget inn som ${navn}.`;
+    vv.kilder = [];
+    vv.fra = "dropbox";
+    fortsett();
+  })
+);
+
 // --- Mappe ---
 
 $("vvVelgMappe").addEventListener("click", async () => {
@@ -234,15 +246,15 @@ async function kjor() {
       return vvFeil(e);
     }
   }
-  if (vv.fra === "onedrive") {
-    $("vvJobberTittel").textContent = "Henter bildene fra OneDrive …";
+  if (vv.fra === "onedrive" || vv.fra === "dropbox") {
+    $("vvJobberTittel").textContent = `Henter bildene fra ${kildeNavn()} …`;
     $("vvJobberTekst").textContent = "Dette kan ta lang tid på et tregt nett. Bilder som er hentet før, hentes ikke på nytt.";
     try {
-      const h = await invoke("onedrive_hent", { mal });
+      const h = await invoke(`${vv.fra}_hent`, { mal });
       vv.kilder = [h.mappe];
       vv.telefonFeil = h.feil;
     } catch (e) {
-      visSteg("onedrive");
+      visSteg(vv.fra);
       return vvFeil(e);
     }
   }
@@ -250,8 +262,8 @@ async function kjor() {
   $("vvJobberTekst").textContent = "CloudJumper ser på hvert bilde for å finne riktig dato og like bilder. Ingenting kopieres ennå.";
   try {
     oversikt = await invoke("skann", { kilder: vv.kilder, mal });
-    if ((vv.fra === "telefon" || vv.fra === "onedrive") && vv.telefonFeil?.length) {
-      oversikt.varsler.push(`${vv.telefonFeil.length} filer kunne ikke hentes ${vv.fra === "telefon" ? "fra telefonen" : "fra OneDrive"}. Prøv igjen senere, så hentes bare de som mangler.`);
+    if (["telefon", "onedrive", "dropbox"].includes(vv.fra) && vv.telefonFeil?.length) {
+      oversikt.varsler.push(`${vv.telefonFeil.length} filer kunne ikke hentes fra ${vv.fra === "telefon" ? "telefonen" : kildeNavn()}. Prøv igjen senere, så hentes bare de som mangler.`);
     }
     settKilder(vv.kilder);
     visteGrupper = SIDE;
@@ -266,7 +278,8 @@ async function kjor() {
 listen("fremdrift", ({ payload }) => {
   const { fase, ferdig, total } = payload;
   $("vvLinje").style.width = total ? `${(100 * ferdig) / total}%` : "0";
-  if (fase === "onedrive") $("vvJobberTittel").textContent = `Henter bildene fra OneDrive … (${ferdig} av ${total})`;
+  if (fase === "dropbox") $("vvJobberTittel").textContent = `Henter bildene fra Dropbox … (${ferdig} av ${total})`;
+  else if (fase === "onedrive") $("vvJobberTittel").textContent = `Henter bildene fra OneDrive … (${ferdig} av ${total})`;
   else if (fase === "telefon") $("vvJobberTittel").textContent = `Henter bildene fra telefonen … (${ferdig} av ${total})`;
   else if (fase === "pakker ut") $("vvJobberTittel").textContent = "Pakker opp filene fra Google …";
   else if (fase === "skanner") $("vvJobberTittel").textContent = `Leser bildene … (${ferdig} av ${total})`;
@@ -336,6 +349,7 @@ function kildeNavn() {
   if (vv.fra === "google") return "Google Foto";
   if (vv.fra === "telefon") return vv.telefon?.navn ?? "mobilen";
   if (vv.fra === "onedrive") return "OneDrive";
+  if (vv.fra === "dropbox") return "Dropbox";
   return vv.kilder[0] ?? "en mappe";
 }
 
@@ -449,6 +463,9 @@ $("tilVeiviser").addEventListener("click", () => visAvansert(false));
   } catch {}
   try {
     $("vvOneDriveValg").hidden = !(await invoke("onedrive_status")).satt_opp;
+  } catch {}
+  try {
+    $("vvDropboxValg").hidden = !(await invoke("dropbox_status")).satt_opp;
   } catch {}
   if (!$("mal").value && vv.status?.standard_samling) $("mal").placeholder = vv.status.standard_samling;
 })();
