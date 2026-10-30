@@ -1,6 +1,6 @@
 //! Skallet rundt kjernen: kommandoer grensesnittet kan kalle, og fremdrift tilbake.
 
-use cloudjumper_kjerne::{lag_plan, miniatyr, modell::{Datokilde, Tillit}, plan::Rolle, rapport, takeout, utfor, Plan};
+use cloudjumper_kjerne::{lag_plan, miniatyr, modell::{Datokilde, Tillit}, plan::{self, Rolle}, rapport, takeout, utfor, Plan};
 use cloudjumper_sky::{dropbox, google, onedrive};
 use serde::Serialize;
 use std::path::{Path, PathBuf};
@@ -37,6 +37,8 @@ struct FilVisning {
 struct GruppeVisning {
     indeks: usize,
     eksakt: bool,
+    /// Helt like filer, eller bare miniatyrer av originalen. Trenger ikke sjekkes av brukeren.
+    sikker: bool,
     filer: Vec<FilVisning>,
 }
 
@@ -89,6 +91,8 @@ fn oversikt(plan: &Plan) -> Oversikt {
         .map(|(gi, g)| GruppeVisning {
             indeks: gi,
             eksakt: g.eksakt,
+            sikker: g.eksakt
+                || g.duplikater.iter().all(|&d| plan::er_miniatyr(&plan.filer[d], &plan.filer[g.original])),
             filer: std::iter::once(g.original)
                 .chain(g.duplikater.iter().copied())
                 .map(|i| fil_visning(plan, i))

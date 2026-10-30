@@ -10,6 +10,16 @@ pub const MAPPE_BILDER: &str = "Bilder";
 pub const MAPPE_VIDEOER: &str = "Videoer";
 pub const MAPPE_DUPLIKATER: &str = "Duplikater";
 pub const MAPPE_UTEN_DATO: &str = "Uten dato";
+/// Under `Duplikater`: små forhåndsvisninger av bilder som finnes i full størrelse.
+pub const MAPPE_MINIATYRER: &str = "Miniatyrbilder";
+
+/// Er `kopi` bare en liten forhåndsvisning av `original`? Telefoner og programmer lager slike
+/// (for eksempel DCIM/.thumbnails), og de er ikke verdt å se gjennom én og én.
+pub fn er_miniatyr(kopi: &Fil, original: &Fil) -> bool {
+    let kopi_side = kopi.bredde.max(kopi.hoyde);
+    let orig_side = original.bredde.max(original.hoyde);
+    kopi_side > 0 && kopi_side <= 512 && orig_side >= 3 * kopi_side
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Rolle {
@@ -49,6 +59,9 @@ pub struct Rapport {
     /// Hvor mye som skal kopieres, så appen kan sjekke at det er plass.
     #[serde(default)]
     pub bytes_a_kopiere: u64,
+    /// Av duplikatene: små forhåndsvisninger, lagt i `Duplikater/Miniatyrbilder`.
+    #[serde(default)]
+    pub miniatyrer: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -159,7 +172,12 @@ impl Plan {
                     Some(d) => PathBuf::from(d.format("%Y").to_string()).join(d.format("%m").to_string()),
                     None => PathBuf::from(MAPPE_UTEN_DATO),
                 };
-                (PathBuf::from(MAPPE_DUPLIKATER).join(under), Rolle::Duplikat)
+                let mut mappe = PathBuf::from(MAPPE_DUPLIKATER);
+                if er_miniatyr(f, &self.filer[o]) {
+                    r.miniatyrer += 1;
+                    mappe.push(MAPPE_MINIATYRER);
+                }
+                (mappe.join(under), Rolle::Duplikat)
             } else {
                 match f.dato {
                     Some(d) => {

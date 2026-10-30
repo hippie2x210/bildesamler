@@ -295,7 +295,10 @@ function visFunn() {
   const linjer = [
     antall(r.bilder, "bilde", "bilder") + " sorteres etter år og måned",
     r.videoer ? antall(r.videoer, "video", "videoer") + " sorteres i en egen mappe" : null,
-    r.duplikater ? `${antall(r.duplikater, "bilde", "bilder")} finnes fra før og legges til side i «Duplikater»` : null,
+    r.duplikater - (r.miniatyrer ?? 0)
+      ? `${antall(r.duplikater - (r.miniatyrer ?? 0), "bilde", "bilder")} finnes fra før og legges til side i «Duplikater»`
+      : null,
+    r.miniatyrer ? `${antall(r.miniatyrer, "lite miniatyrbilde", "små miniatyrbilder")} av bilder du har i full størrelse legges i «Duplikater/Miniatyrbilder»` : null,
     r.uten_dato ? `${antall(r.uten_dato, "bilde", "bilder")} uten sikker dato legges i «Uten dato»` : null,
     r.ulesbare ? `${antall(r.ulesbare, "fil", "filer")} kunne ikke leses og hoppes over` : null,
     r.takeout_albumkopier
@@ -310,7 +313,14 @@ function visFunn() {
   if (!nytt) $("vvFunn").append(el("li", {}, "Ingenting nytt å kopiere. Alt er allerede i samlingen."));
   $("vvKopier").disabled = nytt === 0;
   $("vvKopierTil").textContent = nytt ? `Kopiene legges i ${samling()}.` : "";
+  // CloudJumper har valgt hvilket bilde som beholdes i hver gruppe. Helt like filer og miniatyrer er sikre;
+  // resten bør brukeren se over før kopieringen.
+  const usikre = oversikt.grupper.filter((g) => !g.sikker).length;
   $("vvSeLike").hidden = !oversikt.grupper.length;
+  $("vvSeLike").textContent = usikre
+    ? `Sjekk ${antall(usikre, "bilde", "bilder")} CloudJumper er usikker på`
+    : "Se de like bildene side om side";
+  $("vvSeLike").classList.toggle("hoved-knapp", usikre > 0);
   visSteg("klar");
   const varsler = oversikt.varsler;
   $("vvVarsler").hidden = !varsler.length;
@@ -385,8 +395,14 @@ function storKort(f, merke, knapp) {
   );
 }
 
+// Bare gruppene CloudJumper er usikker på, hvis det finnes noen. Ellers alle.
+function likeGrupper() {
+  const usikre = oversikt.grupper.filter((g) => !g.sikker);
+  return usikre.length ? usikre : oversikt.grupper;
+}
+
 function visLike() {
-  const grupper = oversikt.grupper;
+  const grupper = likeGrupper();
   likeNr = Math.max(0, Math.min(likeNr, grupper.length - 1));
   const g = grupper[likeNr];
   $("vvLikeTittel").textContent = `Like bilder (${likeNr + 1} av ${grupper.length})`;

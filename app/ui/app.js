@@ -216,6 +216,7 @@ function visResultat() {
       rad("Bilder som sorteres i Bilder/År/Måned", r.bilder),
       rad("Videoer som sorteres i Videoer/År/Måned", r.videoer),
       rad("Duplikater (legges i «Duplikater»)", `${r.duplikater} (${storrelse(r.duplikat_bytes)})`),
+      rad("  … av dem små miniatyrbilder (Duplikater/Miniatyrbilder)", r.miniatyrer ?? 0),
       rad("Uten sikker dato (legges i «Uten dato»)", r.uten_dato),
       rad("Filer med advarsel", r.med_advarsel),
       rad("Kunne ikke leses", r.ulesbare),
