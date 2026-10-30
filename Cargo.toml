@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["kjerne", "app/src-tauri"]
+members = ["kjerne", "sky", "telefon", "app/src-tauri"]
 
 [workspace.package]
 version = "0.1.0"

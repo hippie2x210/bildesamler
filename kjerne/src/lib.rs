@@ -1,11 +1,14 @@
-//! Kjernen i Bildesamler: skanner mapper, leser datoer, finner duplikater og lager en plan.
+//! Kjernen i CloudJumper: skanner mapper, leser datoer, finner duplikater og lager en plan.
 //! Grunnregel: kjernen sletter aldri en fil.
 
 pub mod dato;
 pub mod likhet;
 pub mod metadata;
+pub mod miniatyr;
 pub mod modell;
 pub mod plan;
+pub mod samling;
+pub mod takeout;
 pub mod utfor;
 
 use rayon::prelude::*;
@@ -23,7 +26,7 @@ pub fn finn_filer(kilder: &[PathBuf], mal: &Path) -> Vec<PathBuf> {
             .into_iter()
             .filter_entry(|e| {
                 let navn = e.file_name().to_string_lossy();
-                let egen = navn == utfor::LOGGMAPPE || navn == utfor::ANGRET;
+                let egen = navn == utfor::LOGGMAPPE || navn == utfor::GAMMEL_LOGGMAPPE || navn == utfor::ANGRET;
                 let er_mal = e.path().canonicalize().is_ok_and(|p| p == mal);
                 !(egen || er_mal)
             })
@@ -40,7 +43,10 @@ pub fn finn_filer(kilder: &[PathBuf], mal: &Path) -> Vec<PathBuf> {
 }
 
 /// Skanner kildene og lager en plan (tørrkjøring). Ingen filer endres.
+/// Bildene som allerede ligger i samlingen tas med i sammenligningen, så en ny kilde ikke gir duplikater i `Bilder`.
 pub fn lag_plan(kilder: &[PathBuf], mal: &Path, fremdrift: &(dyn Fn(usize, usize) + Sync)) -> Plan {
+    takeout::glem_mapper();
+    let samling = samling::les(mal, fremdrift);
     let stier = finn_filer(kilder, mal);
     let ferdig = AtomicUsize::new(0);
     let total = stier.len();
@@ -61,6 +67,7 @@ pub fn lag_plan(kilder: &[PathBuf], mal: &Path, fremdrift: &(dyn Fn(usize, usize
             Err(e) => ulesbare.push((sti, format!("{e:#}"))),
         }
     }
+    filer.extend(samling.originaler);
     let grupper = likhet::grupper(&filer);
-    Plan::ny(mal, filer, grupper, ulesbare)
+    Plan::med_samling(mal, filer, grupper, ulesbare, samling.sha)
 }
