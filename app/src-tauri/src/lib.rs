@@ -1,7 +1,7 @@
 //! Skallet rundt kjernen: kommandoer grensesnittet kan kalle, og fremdrift tilbake.
 
 use cloudjumper_kjerne::{lag_plan, miniatyr, modell::{Datokilde, Tillit}, plan::Rolle, rapport, takeout, utfor, Plan};
-use cloudjumper_sky::{google, onedrive};
+use cloudjumper_sky::{dropbox, google, onedrive};
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -352,6 +352,65 @@ async fn onedrive_hent(app: AppHandle, mal: String) -> Result<onedrive::Henting,
     tauri::async_runtime::spawn_blocking(move || {
         onedrive::hent(&klient, &mappe, &|ferdig, total| {
             let _ = app.emit("fremdrift", Fremdrift { fase: "onedrive", ferdig, total });
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+    .map_err(|e| format!("{e:#}"))
+}
+
+/// App-nøkkelen fra Dropbox (ikke hemmelig). Bygges inn fra CLOUDJUMPER_DROPBOX_NOKKEL, eller leses fra
+/// dropbox-nokkel.txt i appens innstillingsmappe eller ved siden av programmet.
+fn dropbox_klient(app: &AppHandle) -> Option<dropbox::Klient> {
+    let nokkel = option_env!("CLOUDJUMPER_DROPBOX_NOKKEL").map(str::to_string).or_else(|| {
+        let mut steder = Vec::new();
+        if let Ok(d) = app.path().app_config_dir() {
+            steder.push(d.join("dropbox-nokkel.txt"));
+        }
+        if let Some(d) = std::env::current_exe().ok().and_then(|e| e.parent().map(Path::to_path_buf)) {
+            steder.push(d.join("dropbox-nokkel.txt"));
+        }
+        steder.iter().find_map(|s| std::fs::read_to_string(s).ok())
+    })?;
+    let nokkel = nokkel.trim().to_string();
+    (!nokkel.is_empty()).then_some(dropbox::Klient { app_key: nokkel })
+}
+
+#[tauri::command]
+fn dropbox_status(app: AppHandle) -> OneDriveStatus {
+    OneDriveStatus { satt_opp: dropbox_klient(&app).is_some(), innlogget: dropbox::er_innlogget() }
+}
+
+#[tauri::command]
+async fn dropbox_logg_inn(app: AppHandle) -> Result<String, String> {
+    let klient = dropbox_klient(&app).ok_or("Dropbox er ikke satt opp i denne versjonen")?;
+    tauri::async_runtime::spawn_blocking(move || {
+        dropbox::logg_inn(&klient, &|adresse| {
+            tauri_plugin_opener::open_url(adresse, None::<&str>).map_err(|e| anyhow::anyhow!(e.to_string()))
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+    .map_err(|e| format!("{e:#}"))
+}
+
+#[tauri::command]
+fn dropbox_logg_ut() -> Result<(), String> {
+    dropbox::logg_ut().map_err(|e| format!("{e:#}"))
+}
+
+/// Laster ned bildene og videoene fra Dropbox til `<samling>/.cloudjumper/dropbox`, som så skannes.
+#[tauri::command]
+async fn dropbox_hent(app: AppHandle, mal: String) -> Result<dropbox::Henting, String> {
+    let klient = dropbox_klient(&app).ok_or("Dropbox er ikke satt opp i denne versjonen")?;
+    if mal.trim().is_empty() {
+        return Err("Velg hvor bildene skal samles.".into());
+    }
+    utfor::flytt_gammel_mappe(Path::new(&mal));
+    let mappe = PathBuf::from(&mal).join(utfor::LOGGMAPPE).join("dropbox");
+    tauri::async_runtime::spawn_blocking(move || {
+        dropbox::hent(&klient, &mappe, &|ferdig, total| {
+            let _ = app.emit("fremdrift", Fremdrift { fase: "dropbox", ferdig, total });
         })
     })
     .await
@@ -822,6 +881,10 @@ pub fn run() {
             onedrive_logg_inn,
             onedrive_logg_ut,
             onedrive_hent,
+            dropbox_status,
+            dropbox_logg_inn,
+            dropbox_logg_ut,
+            dropbox_hent,
             apne_mappe,
             google_status,
             google_bestill,

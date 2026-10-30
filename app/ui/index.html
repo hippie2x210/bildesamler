@@ -19,6 +19,7 @@
           <button class="stor" data-gaa="google">📷 Google Foto<small>Bildene du har tatt med mobilen og lagret hos Google</small></button>
           <button class="stor" data-gaa="telefon">📱 Mobilen<small>Koble telefonen til PC-en med ladekabelen</small></button>
           <button class="stor" data-gaa="onedrive" id="vvOneDriveValg" hidden>☁️ OneDrive<small>Bilder lagret i Microsoft OneDrive</small></button>
+          <button class="stor" data-gaa="dropbox" id="vvDropboxValg" hidden>📦 Dropbox<small>Bilder lagret i Dropbox</small></button>
           <button class="stor" data-gaa="mappe">🗂️ En mappe eller minnepinne<small>Bilder som allerede ligger på PC-en eller en disk</small></button>
         </div>
         <p class="trygt">CloudJumper lager kopier. Originalbildene blir alltid liggende der de er, og ingenting slettes.</p>
@@ -69,6 +70,14 @@
         <p class="liten">Microsoft viser «Ubekreftet» ved innloggingen. Det er normalt for små programmer som ikke er laget av et firma.</p>
         <button class="stor-knapp hoved-knapp" id="vvOneDriveLoggInn">Logg inn på OneDrive</button>
         <p class="liten" id="vvOneDriveTekst"></p>
+        <button class="tilbake" data-gaa="start">‹ Tilbake</button>
+      </section>
+
+      <section data-steg="dropbox" hidden>
+        <h1>Dropbox</h1>
+        <p class="stor-tekst">Trykk knappen og logg inn på Dropbox i nettleseren. CloudJumper får bare lov til å lese bildene, ikke endre eller slette noe.</p>
+        <button class="stor-knapp hoved-knapp" id="vvDropboxLoggInn">Logg inn på Dropbox</button>
+        <p class="liten" id="vvDropboxTekst"></p>
         <button class="tilbake" data-gaa="start">‹ Tilbake</button>
       </section>
 
