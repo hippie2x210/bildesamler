@@ -441,7 +441,8 @@ $("tilVeiviser").addEventListener("click", () => visAvansert(false));
 // --- Oppstart ---
 
 (async () => {
-  visAvansert(hent("avansert", false));
+  // Appen starter alltid i den enkle visningen, så den som låner PC-en etterpå ikke møter den avanserte.
+  visAvansert(false);
   storTekst(hent("storTekst", false));
   visHvor();
   try {
