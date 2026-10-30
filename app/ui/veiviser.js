@@ -11,10 +11,27 @@ const vv = {
 function visSteg(navn) {
   for (const s of document.querySelectorAll("#veiviser [data-steg]")) s.hidden = s.dataset.steg !== navn;
   // Linjen skal ikke stå full fra forrige gang mens neste jobb starter.
-  if (navn === "jobber") $("vvLinje").style.width = "0";
+  if (navn === "jobber") {
+    $("vvLinje").style.width = "";
+    $("vvLinjeBoks").classList.add("ukjent");
+    $("vvProsent").textContent = "";
+  }
+  visStegvis(navn);
   $("vvFeil").hidden = true;
   if (navn === "google") oppdaterGoogle();
   if (navn === "start") visHvor();
+}
+
+// Hvor brukeren er: 1 velg, 2 les, 3 se over, 4 kopier. «Ferdig» viser alle som gjort.
+const STEGVIS = { google: 1, telefon: 1, onedrive: 1, dropbox: 1, mappe: 1, samling: 1, jobber: 2, klar: 3, like: 3, ferdig: 5 };
+
+function visStegvis(navn) {
+  const na = navn === "jobber" && vv.kopierer ? 4 : STEGVIS[navn];
+  $("vvStegvis").hidden = !na;
+  [...$("vvStegvis").children].forEach((li, i) => {
+    li.classList.toggle("na", i + 1 === na);
+    li.classList.toggle("gjort", i + 1 < na);
+  });
 }
 
 // Viser at noe skjer mens en knapp jobber, så ingen tror appen har hengt seg.
@@ -75,6 +92,8 @@ async function oppdaterGoogle() {
     t.classList.toggle("gjort", nr < na);
     t.querySelector(".stor-knapp").classList.toggle("hoved-knapp", nr === na);
   }
+  // Det første trinnet er framhevet og trenger ingen egen setning. Da får «Tilbake» plass uten å bla.
+  $("vvGoogleNa").hidden = na === 1;
   $("vvGoogleNa").textContent = [
     "Start med steg 1.",
     underveis.size ? "Bildene lastes ned. La Google-vinduet stå åpent." : "Venter på e-post fra Google. Når den kommer, gå til steg 2.",
@@ -264,6 +283,7 @@ async function kjor() {
   $("vvJobberTekst").textContent = "CloudJumper ser på hvert bilde for å finne riktig dato og like bilder. Ingenting kopieres ennå.";
   try {
     oversikt = await invoke("skann", { kilder: vv.kilder, mal });
+    vv.sjekket = false;
     if (["telefon", "onedrive", "dropbox"].includes(vv.fra) && vv.telefonFeil?.length) {
       oversikt.varsler.push(`${vv.telefonFeil.length} filer kunne ikke hentes fra ${vv.fra === "telefon" ? "telefonen" : kildeNavn()}. Prøv igjen senere, så hentes bare de som mangler.`);
     }
@@ -279,7 +299,10 @@ async function kjor() {
 
 listen("fremdrift", ({ payload }) => {
   const { fase, ferdig, total } = payload;
-  $("vvLinje").style.width = total ? `${(100 * ferdig) / total}%` : "0";
+  // Uten total (mens filene telles) går linjen fram og tilbake, så det synes at noe skjer.
+  $("vvLinjeBoks").classList.toggle("ukjent", !total);
+  $("vvLinje").style.width = total ? `${(100 * ferdig) / total}%` : "";
+  $("vvProsent").textContent = total ? `${Math.floor((100 * ferdig) / total)} %` : "";
   if (fase === "dropbox") $("vvJobberTittel").textContent = `Henter bildene fra Dropbox … (${ferdig} av ${total})`;
   else if (fase === "onedrive") $("vvJobberTittel").textContent = `Henter bildene fra OneDrive … (${ferdig} av ${total})`;
   else if (fase === "telefon") $("vvJobberTittel").textContent = `Henter bildene fra telefonen … (${ferdig} av ${total})`;
@@ -294,23 +317,28 @@ function antall(n, en, flere) {
 
 function visFunn() {
   const r = oversikt.rapport;
+  // [ikon, tall, resten av setningen]. Tallet står i fet skrift så det er lett å se.
   const linjer = [
-    antall(r.bilder, "bilde", "bilder") + " sorteres etter år og måned",
-    r.videoer ? antall(r.videoer, "video", "videoer") + " sorteres i en egen mappe" : null,
+    ["🖼️", antall(r.bilder, "bilde", "bilder"), "sorteres etter år og måned"],
+    r.videoer ? ["🎬", antall(r.videoer, "video", "videoer"), "sorteres i en egen mappe"] : null,
     r.duplikater - (r.miniatyrer ?? 0)
-      ? `${antall(r.duplikater - (r.miniatyrer ?? 0), "bilde", "bilder")} finnes fra før og legges til side i «Duplikater»`
+      ? ["📑", antall(r.duplikater - (r.miniatyrer ?? 0), "bilde", "bilder"), "finnes fra før og legges til side i «Duplikater»"]
       : null,
-    r.miniatyrer ? `${antall(r.miniatyrer, "lite miniatyrbilde", "små miniatyrbilder")} av bilder du har i full størrelse legges i «Duplikater/Miniatyrbilder»` : null,
-    r.uten_dato ? `${antall(r.uten_dato, "bilde", "bilder")} uten sikker dato legges i «Uten dato»` : null,
-    r.ulesbare ? `${antall(r.ulesbare, "fil", "filer")} kunne ikke leses og hoppes over` : null,
+    r.miniatyrer
+      ? ["🔍", antall(r.miniatyrer, "lite miniatyrbilde", "små miniatyrbilder"), "av bilder du har i full størrelse legges i «Duplikater/Miniatyrbilder»"]
+      : null,
+    r.uten_dato ? ["❓", antall(r.uten_dato, "bilde", "bilder"), "uten sikker dato legges i «Uten dato»"] : null,
+    r.ulesbare ? ["⚠️", antall(r.ulesbare, "fil", "filer"), "kunne ikke leses og hoppes over"] : null,
     r.takeout_albumkopier
-      ? `${antall(r.takeout_albumkopier, "bilde", "bilder")} lå i flere Google-album og kopieres bare én gang`
+      ? ["📚", antall(r.takeout_albumkopier, "bilde", "bilder"), "lå i flere Google-album og kopieres bare én gang"]
       : null,
     r.allerede_i_samlingen
-      ? `${antall(r.allerede_i_samlingen, "bilde", "bilder")} er allerede i samlingen og hoppes over`
+      ? ["✔️", antall(r.allerede_i_samlingen, "bilde", "bilder"), "er allerede i samlingen og hoppes over"]
       : null,
   ].filter(Boolean);
-  $("vvFunn").replaceChildren(...linjer.map((l) => el("li", {}, l)));
+  $("vvFunn").replaceChildren(
+    ...linjer.map(([ikon, tall, tekst]) => el("li", {}, el("span", { class: "ikon", "aria-hidden": "true" }, ikon), el("b", {}, tall), ` ${tekst}`))
+  );
   const nytt = r.bilder + r.videoer + r.duplikater + r.uten_dato;
   if (!nytt) $("vvFunn").append(el("li", {}, "Ingenting nytt å kopiere. Alt er allerede i samlingen."));
   $("vvKopier").disabled = nytt === 0;
@@ -322,7 +350,12 @@ function visFunn() {
   $("vvSeLike").textContent = usikre
     ? `Sjekk ${antall(usikre, "bilde", "bilder")} CloudJumper er usikker på`
     : "Se de like bildene side om side";
-  $("vvSeLike").classList.toggle("hoved-knapp", usikre > 0);
+  // Er CloudJumper usikker, er det naturlig å sjekke først og kopiere etterpå. Knappen for det står da først.
+  const sjekkForst = usikre > 0 && !vv.sjekket;
+  $("vvSeLike").classList.toggle("hoved-knapp", sjekkForst);
+  $("vvKopier").classList.toggle("hoved-knapp", !sjekkForst);
+  if (sjekkForst) $("vvKlarKnapper").prepend($("vvSeLike"));
+  else $("vvKlarKnapper").prepend($("vvKopier"));
   visSteg("klar");
   const varsler = oversikt.varsler;
   $("vvVarsler").hidden = !varsler.length;
@@ -337,6 +370,7 @@ $("vvKopier").addEventListener("click", async () => {
     { title: "Kopier bildene", kind: "info", okLabel: "Kopier", cancelLabel: "Ikke nå" }
   );
   if (!ok) return;
+  vv.kopierer = true;
   visSteg("jobber");
   $("vvJobberTittel").textContent = "Kopierer …";
   $("vvJobberTekst").textContent = "Du kan gå fra PC-en. CloudJumper sier fra når den er ferdig.";
@@ -359,6 +393,8 @@ $("vvKopier").addEventListener("click", async () => {
   } catch (e) {
     visSteg("klar");
     vvFeil(e);
+  } finally {
+    vv.kopierer = false;
   }
 });
 
@@ -396,9 +432,19 @@ $("vvAngre").addEventListener("click", async (e) => {
 // Én gruppe om gangen med store bilder. Enklere å se enn den lange listen i den avanserte visningen.
 let likeNr = 0;
 
-function storKort(f, merke, knapp) {
+// Hvorfor CloudJumper valgte å beholde dette bildet, i ord brukeren forstår.
+function hvorfor(orig, andre) {
+  const grunner = [];
+  if (andre.some((f) => orig.bredde * orig.hoyde > f.bredde * f.hoyde)) grunner.push("størst og skarpest");
+  if (orig.tillit === "Hoy" && andre.some((f) => f.tillit !== "Hoy")) grunner.push("har sikker dato fra kameraet");
+  if (orig.kamera && andre.some((f) => !f.kamera)) grunner.push("har opplysninger fra kameraet");
+  return grunner.length ? `Fordi det er ${grunner.join(" og ")}.` : "Bildene er like gode. CloudJumper beholder det første.";
+}
+
+function storKort(f, merke, knapp, forklaring) {
   return el("div", { class: "stort-kort" },
     el("div", { class: "merke" }, merke),
+    forklaring ? el("div", { class: "forklaring" }, forklaring) : null,
     el("img", { src: convertFileSrc(f.sti, "mini"), alt: f.navn, onerror: skjulBilde }),
     el("div", {}, el("b", {}, f.navn)),
     el("div", {}, `${f.bredde} × ${f.hoyde} punkter, ${storrelse(f.storrelse)}`),
@@ -420,7 +466,7 @@ function visLike() {
   $("vvLikeTittel").textContent = `Like bilder (${likeNr + 1} av ${grupper.length})`;
   const [orig, ...andre] = g.filer;
   $("vvPar").replaceChildren(
-    storKort(orig, "✔ Beholdes", null),
+    storKort(orig, "✔ Beholdes", null, hvorfor(orig, andre)),
     ...andre.map((f) =>
       storKort(f, "Legges i «Duplikater»",
         el("button", { class: "stor-knapp", onclick: () => byttOriginal(g.indeks, f.indeks) }, "Behold heller denne"))
@@ -428,6 +474,10 @@ function visLike() {
   );
   $("vvForrige").disabled = likeNr === 0;
   $("vvNeste").disabled = likeNr >= grupper.length - 1;
+  $("vvForrige").hidden = $("vvNeste").hidden = grupper.length < 2;
+  // På siste par er neste steg å gå tilbake og kopiere.
+  $("vvLikeFerdig").hidden = likeNr < grupper.length - 1;
+  $("vvTilOversikt").hidden = !$("vvLikeFerdig").hidden;
 }
 
 async function byttOriginal(gruppe, fil) {
@@ -447,7 +497,12 @@ $("vvSeLike").addEventListener("click", () => {
 });
 $("vvForrige").addEventListener("click", () => { likeNr--; visLike(); });
 $("vvNeste").addEventListener("click", () => { likeNr++; visLike(); });
-$("vvTilOversikt").addEventListener("click", () => visSteg("klar"));
+function tilOversikten() {
+  vv.sjekket = true;
+  visFunn();
+}
+$("vvTilOversikt").addEventListener("click", tilOversikten);
+$("vvLikeFerdig").addEventListener("click", tilOversikten);
 
 // --- Større tekst ---
 
