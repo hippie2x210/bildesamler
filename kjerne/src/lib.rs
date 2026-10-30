@@ -31,7 +31,8 @@ pub fn finn_filer(kilder: &[PathBuf], mal: &Path) -> Vec<PathBuf> {
                 // Skjulte mapper og filer under kilden: telefonens miniatyrer (DCIM/.thumbnails),
                 // papirkurven (.trashed-…) og halvferdige filer (.pending-…). Ikke bildene brukeren ser.
                 let skjult = e.depth() > 0 && navn.starts_with('.');
-                let er_mal = e.path().canonicalize().is_ok_and(|p| p == mal);
+                // Bare mapper sjekkes: canonicalize for hver fil er tregt på nettverksdisker og minnepinner.
+                let er_mal = e.file_type().is_dir() && e.path().canonicalize().is_ok_and(|p| p == mal);
                 !(egen || er_mal || skjult)
             })
             .filter_map(Result::ok)

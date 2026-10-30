@@ -10,6 +10,8 @@ const vv = {
 
 function visSteg(navn) {
   for (const s of document.querySelectorAll("#veiviser [data-steg]")) s.hidden = s.dataset.steg !== navn;
+  // Linjen skal ikke stå full fra forrige gang mens neste jobb starter.
+  if (navn === "jobber") $("vvLinje").style.width = "0";
   $("vvFeil").hidden = true;
   if (navn === "google") oppdaterGoogle();
   if (navn === "start") visHvor();
@@ -343,8 +345,15 @@ $("vvKopier").addEventListener("click", async () => {
     lagre("sist", { tid: Date.now(), kopiert: res.kopiert, kilde: kildeNavn() });
     const deler = [`${antall(res.kopiert, "bilde", "bilder")} er kopiert til samlingen.`];
     if (res.allerede_der) deler.push(`${antall(res.allerede_der, "bilde", "bilder")} lå der fra før.`);
-    if (res.feil.length) deler.push(`${antall(res.feil.length, "fil", "filer")} kunne ikke kopieres. Se «Avansert visning».`);
+    if (res.feil.length) deler.push(`${antall(res.feil.length, "fil", "filer")} kunne ikke kopieres:`);
     $("vvFerdigTekst").textContent = deler.join(" ");
+    // Filene som feilet vises her. Kopieringen ble startet fra denne visningen, så den avanserte vet ikke om dem.
+    $("vvFeilListe").hidden = !res.feil.length;
+    $("vvFeilListe").replaceChildren(
+      ...res.feil.slice(0, 20).map(([sti, feil]) => el("li", {}, `${sti.split(/[\\/]/).pop()}: ${feil}`)),
+      res.feil.length > 20 ? el("li", {}, `… og ${res.feil.length - 20} til. Alle står i «Hva CloudJumper har gjort.txt».`) : null
+    );
+    $("vvAngreLinje").hidden = !res.kopiert;
     if (vv.fra === "google") lagre("googleFiler", []);
     visSteg("ferdig");
   } catch (e) {
@@ -373,6 +382,9 @@ $("vvAngre").addEventListener("click", async (e) => {
   try {
     const n = await invoke("angre", { mal: samling() });
     $("vvFerdigTekst").textContent = `Angret. ${antall(n, "fil", "filer")} er flyttet til «_Angret» i samlingen.`;
+    // Et nytt trykk ville angret kopieringen før denne også. Det hører hjemme i den avanserte visningen.
+    $("vvAngreLinje").hidden = true;
+    $("vvFeilListe").hidden = true;
     lagre("sist", null);
   } catch (err) {
     vvFeil(err);

@@ -15,6 +15,9 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 const MELLOMLAGER: &str = "samling.json";
+/// Økes når `metadata::les` gir et annet svar enn før, så det som er lagret leses på nytt.
+/// 2: bildene snus etter EXIF før den perseptuelle hashen lages.
+const LESEVERSJON: u32 = 2;
 
 /// Det vi vet om samlingen.
 #[derive(Debug, Default)]
@@ -27,6 +30,8 @@ pub struct Samling {
 
 #[derive(Serialize, Deserialize)]
 struct Lagret {
+    #[serde(default)]
+    versjon: u32,
     storrelse: u64,
     endret: Option<i64>,
     fil: Fil,
@@ -66,7 +71,9 @@ pub fn les(mal: &Path, fremdrift: &(dyn Fn(usize, usize) + Sync)) -> Samling {
     let nye: Vec<&(PathBuf, bool, u64, Option<i64>)> = funnet
         .iter()
         .filter(|(rel, _, storrelse, endret)| {
-            !lager.get(&nokkel(rel)).is_some_and(|l| l.storrelse == *storrelse && l.endret == *endret)
+            !lager
+                .get(&nokkel(rel))
+                .is_some_and(|l| l.versjon == LESEVERSJON && l.storrelse == *storrelse && l.endret == *endret)
         })
         .collect();
     let ferdig = AtomicUsize::new(0);
@@ -75,7 +82,7 @@ pub fn les(mal: &Path, fremdrift: &(dyn Fn(usize, usize) + Sync)) -> Samling {
         .filter_map(|(rel, _, storrelse, endret)| {
             let fil = metadata::les(&mal.join(rel)).ok();
             fremdrift(ferdig.fetch_add(1, Ordering::Relaxed) + 1, nye.len());
-            Some((nokkel(rel), Lagret { storrelse: *storrelse, endret: *endret, fil: fil? }))
+            Some((nokkel(rel), Lagret { versjon: LESEVERSJON, storrelse: *storrelse, endret: *endret, fil: fil? }))
         })
         .collect();
     let endret_noe = !leste.is_empty() || lager.len() != funnet.len();

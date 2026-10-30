@@ -84,10 +84,14 @@ fn fil_visning(plan: &Plan, i: usize) -> FilVisning {
 }
 
 fn oversikt(plan: &Plan) -> Oversikt {
+    let har_handling: std::collections::HashSet<usize> = plan.handlinger.iter().map(|h| h.fil).collect();
     let grupper = plan
         .grupper
         .iter()
         .enumerate()
+        // Grupper med bare bilder som allerede ligger i samlingen, gjør ikke denne kopieringen noe med.
+        // De ble ellers vist til sjekk på nytt hver gang.
+        .filter(|(_, g)| std::iter::once(&g.original).chain(&g.duplikater).any(|i| har_handling.contains(i)))
         .map(|(gi, g)| GruppeVisning {
             indeks: gi,
             eksakt: g.eksakt,
@@ -173,6 +177,8 @@ async fn skann(app: AppHandle, tilstand: State<'_, Tilstand>, kilder: Vec<String
     }
 
     let app2 = app.clone();
+    // Like bilder vises side om side med dem som allerede ligger i samlingen, så de må også kunne vises.
+    let _ = app.asset_protocol_scope().allow_directory(&mal, true);
     let (plan, takeout_varsler, kilder) = tauri::async_runtime::spawn_blocking(move || {
         // Takeout-zip-er pakkes ut i samlingens egen mappe først. Zip-filene røres ikke.
         let (kilder, varsler) = takeout::forbered_kilder(&kilder, &mal, &|ferdig, total| {
@@ -301,7 +307,8 @@ fn google_klient(app: &AppHandle) -> Result<google::Klient, String> {
 /// App-ID-en fra Azure (ikke hemmelig). Bygges inn fra CLOUDJUMPER_ONEDRIVE_KLIENT, eller leses fra
 /// onedrive-klient.txt i appens innstillingsmappe eller ved siden av programmet.
 fn onedrive_klient(app: &AppHandle) -> Option<onedrive::Klient> {
-    let id = option_env!("CLOUDJUMPER_ONEDRIVE_KLIENT").map(str::to_string).or_else(|| {
+    // Mangler hemmeligheten i GitHub, bygges en tom streng inn. Da skal filen brukes i stedet.
+    let id = option_env!("CLOUDJUMPER_ONEDRIVE_KLIENT").filter(|s| !s.trim().is_empty()).map(str::to_string).or_else(|| {
         let mut steder = Vec::new();
         if let Ok(d) = app.path().app_config_dir() {
             steder.push(d.join("onedrive-klient.txt"));
@@ -366,7 +373,7 @@ async fn onedrive_hent(app: AppHandle, mal: String) -> Result<onedrive::Henting,
 /// App-nøkkelen fra Dropbox (ikke hemmelig). Bygges inn fra CLOUDJUMPER_DROPBOX_NOKKEL, eller leses fra
 /// dropbox-nokkel.txt i appens innstillingsmappe eller ved siden av programmet.
 fn dropbox_klient(app: &AppHandle) -> Option<dropbox::Klient> {
-    let nokkel = option_env!("CLOUDJUMPER_DROPBOX_NOKKEL").map(str::to_string).or_else(|| {
+    let nokkel = option_env!("CLOUDJUMPER_DROPBOX_NOKKEL").filter(|s| !s.trim().is_empty()).map(str::to_string).or_else(|| {
         let mut steder = Vec::new();
         if let Ok(d) = app.path().app_config_dir() {
             steder.push(d.join("dropbox-nokkel.txt"));

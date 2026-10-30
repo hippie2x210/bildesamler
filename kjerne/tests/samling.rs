@@ -105,3 +105,55 @@ fn tom_plassholder_fra_avbrutt_kjoring_brukes_igjen() {
     assert_eq!(fs::read(&plassholder).unwrap(), fs::read(mobil.join("IMG_20190704_120000.jpg")).unwrap());
     assert_eq!(fs::read_dir(samling.join("Bilder/2019/07")).unwrap().count(), 1);
 }
+
+/// JPEG med et EXIF-merke om at bildet skal snus 90° med klokka (Orientation = 6), slik mobiler lagrer stående bilder.
+fn med_retning(b: &image::RgbImage, sti: &Path) {
+    let mut jpeg = Vec::new();
+    image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg, 95).encode_image(b).unwrap();
+    // TIFF (little endian) med én IFD og ett felt: 0x0112 SHORT 1 = 6.
+    let mut tiff = b"II*\0\x08\0\0\0\x01\0".to_vec();
+    tiff.extend([0x12, 0x01, 3, 0, 1, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 0]);
+    let mut app1 = b"Exif\0\0".to_vec();
+    app1.extend(tiff);
+    let mut ut = jpeg[..2].to_vec();
+    ut.extend([0xFF, 0xE1]);
+    ut.extend(((app1.len() + 2) as u16).to_be_bytes());
+    ut.extend(app1);
+    ut.extend(&jpeg[2..]);
+    fs::create_dir_all(sti.parent().unwrap()).unwrap();
+    fs::write(sti, ut).unwrap();
+}
+
+#[test]
+fn snudd_kopi_er_samme_bilde() {
+    let d = tempfile::tempdir().unwrap();
+    let lagret = image::RgbImage::from_fn(640, 480, |x, y| {
+        let (x, y) = (x / 10, y / 10);
+        image::Rgb([(x * 4) as u8, (y * 5) as u8, ((x * y) % 255) as u8])
+    });
+    // Originalen fra mobilen er lagret liggende med et merke om å snus. Kopien fra Google er ferdig snudd og mindre.
+    med_retning(&lagret, &d.path().join("Mobil/IMG_20190704_120000.jpg"));
+    let snudd = image::imageops::rotate90(&lagret);
+    let liten = image::imageops::resize(&snudd, 240, 320, image::imageops::FilterType::Triangle);
+    fs::create_dir_all(d.path().join("Google")).unwrap();
+    liten.save(d.path().join("Google/IMG_20190704_120000.jpg")).unwrap();
+
+    let plan = lag_plan(&[d.path().join("Mobil"), d.path().join("Google")], &d.path().join("Samling"), &|_, _| {});
+    assert_eq!(plan.grupper.len(), 1, "den snudde kopien ble ikke gjenkjent");
+    let original = &plan.filer[plan.grupper[0].original];
+    assert!(original.sti.starts_with(d.path().join("Mobil")));
+    assert_eq!((original.bredde, original.hoyde), (480, 640));
+}
+
+#[test]
+fn kopien_far_bildets_dato() {
+    let d = tempfile::tempdir().unwrap();
+    // Som en fil lastet ned fra skyen i dag: endringstiden er nå, men filnavnet har datoen.
+    bilde(&d.path().join("OneDrive/IMG_20190704_120000.jpg"), 320, 90);
+    let samling = d.path().join("Samling");
+    let plan = lag_plan(&[d.path().join("OneDrive")], &samling, &|_, _| {});
+    utfor::utfor(&plan, &|_, _| {}).unwrap();
+    let endret = fs::metadata(samling.join("Bilder/2019/07/IMG_20190704_120000.jpg")).unwrap().modified().unwrap();
+    let endret = chrono::DateTime::<chrono::Local>::from(endret).naive_local();
+    assert_eq!(endret.to_string(), "2019-07-04 12:00:00");
+}

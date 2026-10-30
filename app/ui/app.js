@@ -95,7 +95,13 @@ $("velgMal").addEventListener("click", async () => {
 listen("fremdrift", ({ payload }) => {
   const { fase, ferdig, total } = payload;
   $("fremdrift").hidden = false;
-  const tekst = { skanner: "Leser filer", "pakker ut": "Pakker ut Google Takeout" }[fase] ?? "Kopierer";
+  const tekst = {
+    skanner: "Leser filer",
+    "pakker ut": "Pakker ut Google Takeout",
+    telefon: "Henter fra telefonen",
+    onedrive: "Henter fra OneDrive",
+    dropbox: "Henter fra Dropbox",
+  }[fase] ?? "Kopierer";
   $("fremdriftTekst").textContent = `${tekst}: ${ferdig} av ${total}`;
   $("fremdriftLinje").style.width = total ? `${(100 * ferdig) / total}%` : "0";
 });
