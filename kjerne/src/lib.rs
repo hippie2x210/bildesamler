@@ -7,6 +7,7 @@ pub mod metadata;
 pub mod miniatyr;
 pub mod modell;
 pub mod plan;
+pub mod rapport;
 pub mod samling;
 pub mod takeout;
 pub mod utfor;
