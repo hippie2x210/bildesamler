@@ -7,8 +7,13 @@ name: Utgivelse
 on:
   push:
     tags: ['v*']
-  # Manuell kjøring bygger og signerer, men lager ingen utgivelse.
+  # Manuell kjøring bygger og signerer. Med «publiser» lages også taggen og utgivelsen.
   workflow_dispatch:
+    inputs:
+      publiser:
+        description: Lag tagg og utgivelse for versjonen i tauri.conf.json
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -19,14 +24,16 @@ jobs:
     runs-on: windows-latest
     outputs:
       artifact-id: ${{ steps.usignert.outputs.artifact-id }}
+      tagg: ${{ steps.versjon.outputs.tagg }}
     steps:
       - uses: actions/checkout@v4
       - name: Sjekk at taggen og versjonen i appen er like
-        if: startsWith(github.ref, 'refs/tags/v')
+        id: versjon
         shell: bash
         run: |
           versjon=$(node -p "require('./app/src-tauri/tauri.conf.json').version")
-          if [ "v$versjon" != "$GITHUB_REF_NAME" ]; then
+          echo "tagg=v$versjon" >> "$GITHUB_OUTPUT"
+          if [ "$GITHUB_REF_TYPE" = "tag" ] && [ "v$versjon" != "$GITHUB_REF_NAME" ]; then
             echo "::error::Taggen er $GITHUB_REF_NAME, men tauri.conf.json sier $versjon"
             exit 1
           fi
@@ -86,7 +93,7 @@ jobs:
     name: Legg ut på GitHub
     needs: [bygg, signer]
     if: >-
-      always() && startsWith(github.ref, 'refs/tags/v') &&
+      always() && (startsWith(github.ref, 'refs/tags/v') || inputs.publiser) &&
       needs.bygg.result == 'success' &&
       (needs.signer.result == 'success' || needs.signer.result == 'skipped')
     runs-on: ubuntu-latest
@@ -101,6 +108,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           SIGNERT: ${{ needs.signer.result == 'success' }}
+          TAGG: ${{ needs.bygg.outputs.tagg }}
         run: |
           if [ "$SIGNERT" = "true" ]; then
             signering="Installasjonsfilen er signert. Free code signing provided by [SignPath.io](https://signpath.io), certificate by [SignPath Foundation](https://signpath.org)."
@@ -112,9 +120,11 @@ jobs:
 
           $signering
 
-          [Code signing policy](https://github.com/$GITHUB_REPOSITORY#code-signing-policy) · [Personvern / privacy](https://github.com/$GITHUB_REPOSITORY/blob/$GITHUB_REF_NAME/PERSONVERN.md)
+          [Code signing policy](https://github.com/$GITHUB_REPOSITORY#code-signing-policy) · [Personvern / privacy](https://github.com/$GITHUB_REPOSITORY/blob/$TAGG/PERSONVERN.md)
           EOF
-          gh release create "$GITHUB_REF_NAME" utgivelse/*.exe \
+          # --target lager taggen på denne committen hvis den ikke finnes fra før.
+          gh release create "$TAGG" utgivelse/*.exe \
             --repo "$GITHUB_REPOSITORY" \
-            --title "CloudJumper ${GITHUB_REF_NAME#v}" \
+            --target "$GITHUB_SHA" \
+            --title "CloudJumper ${TAGG#v}" \
             --notes-file notater.md
