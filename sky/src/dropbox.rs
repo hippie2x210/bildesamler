@@ -25,8 +25,8 @@ const NOKKEL: &str = "dropbox";
 const FORSOK: u32 = 6;
 
 const MEDIETYPER: &[&str] = &[
-    "jpg", "jpeg", "png", "heic", "heif", "webp", "gif", "bmp", "tif", "tiff", "dng", "cr2", "nef", "arw", "mp4", "mov",
-    "m4v", "3gp", "avi", "mkv", "mts",
+    "jpg", "jpeg", "png", "heic", "heif", "webp", "gif", "bmp", "tif", "tiff", "dng", "cr2", "cr3", "nef", "arw", "orf",
+    "rw2", "raf", "mp4", "mov", "m4v", "3gp", "avi", "mkv", "mts", "m2ts", "wmv",
 ];
 
 /// App-nøkkelen fra Dropbox. Ikke hemmelig.

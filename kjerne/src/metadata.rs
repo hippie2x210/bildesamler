@@ -65,8 +65,14 @@ pub fn les(sti: &Path) -> Result<Fil> {
 
     match medietype {
         Medietype::Bilde => {
-            les_exif(&data, &mut fil);
-            if let Ok(bilde) = image::load_from_memory(&data) {
+            let retning = les_exif(&data, &mut fil);
+            if let Ok(mut bilde) = image::load_from_memory(&data) {
+                // Snu bildet slik det vises. Google Foto og WhatsApp lagrer ofte kopien ferdig snudd, mens
+                // originalen fra kameraet bare har et merke om hvilken vei den skal snus. Uten dette ble
+                // de ikke gjenkjent som samme bilde, fordi både motivet og formatet var på tvers.
+                if let Some(r) = retning {
+                    bilde.apply_orientation(r);
+                }
                 fil.bredde = bilde.width();
                 fil.hoyde = bilde.height();
                 fil.phash = Some(dhash(&bilde));
@@ -81,9 +87,10 @@ pub fn les(sti: &Path) -> Result<Fil> {
     Ok(fil)
 }
 
-fn les_exif(data: &[u8], fil: &mut Fil) {
+/// Leser dato, kamera og GPS. Returnerer hvilken vei bildet skal snus for å vises riktig.
+fn les_exif(data: &[u8], fil: &mut Fil) -> Option<image::metadata::Orientation> {
     let Ok(exif) = exif::Reader::new().read_from_container(&mut Cursor::new(data)) else {
-        return;
+        return None;
     };
     let tekst = |tag| {
         exif.get_field(tag, exif::In::PRIMARY)
@@ -112,6 +119,9 @@ fn les_exif(data: &[u8], fil: &mut Fil) {
         fil.kamera = Some(kamera);
     }
     fil.har_gps = exif.get_field(exif::Tag::GPSLatitude, exif::In::PRIMARY).is_some();
+    exif.get_field(exif::Tag::Orientation, exif::In::PRIMARY)
+        .and_then(|f| f.value.get_uint(0))
+        .and_then(|v| image::metadata::Orientation::from_exif(v as u8))
 }
 
 /// dHash på 16x16: sammenligner nabopiksler i et nedskalert gråtonebilde.

@@ -9,6 +9,7 @@ use sha2::{Digest, Sha256};
 use std::fs;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 
 pub const LOGGMAPPE: &str = ".cloudjumper";
 /// Navnet mappen hadde før appen het CloudJumper.
@@ -64,7 +65,7 @@ pub fn utfor(plan: &Plan, fremdrift: &dyn Fn(usize, usize)) -> Result<Resultat> 
         // Bilder fra Takeout ligger fortsatt i zip-filen. Kopien vi pakket ut er vår egen og kan flyttes,
         // så de ikke tar plass to ganger på disken.
         let flytt = crate::plan::fra_takeout(&fil.sti);
-        match kopier_en(&fil.sti, &plan.mal, &h.til, &fil.sha256, flytt) {
+        match kopier_en(&fil.sti, &plan.mal, &h.til, &fil.sha256, flytt, fil.dato.and_then(systemtid)) {
             Ok(Some(til)) => {
                 res.kopiert += 1;
                 let linje = Logglinje { kilde: fil.sti.clone(), til, sha256: fil.sha256.clone(), flyttet: flytt };
@@ -99,7 +100,17 @@ fn ny_logg(mappe: &Path) -> Result<(PathBuf, fs::File)> {
 /// bare kan lages hvis navnet er ledig, og kopien flyttes over den. Da kan ingen annen fil bli overskrevet,
 /// selv om noe dukker opp i mappen mens vi kopierer.
 /// Med `flytt` flyttes filen i stedet for å kopieres. Det brukes bare for CloudJumper sine egne utpakkede filer.
-fn kopier_en(kilde: &Path, mal: &Path, til: &Path, sha: &str, flytt: bool) -> Result<Option<PathBuf>> {
+///
+/// Kopien får bildets dato som endringstid når den er kjent. Filer lastet ned fra OneDrive, Dropbox og
+/// Google har ellers nedlastingsdagen, og da så det ut i Utforsker som om alle bildene var tatt i dag.
+fn kopier_en(
+    kilde: &Path,
+    mal: &Path,
+    til: &Path,
+    sha: &str,
+    flytt: bool,
+    dato: Option<SystemTime>,
+) -> Result<Option<PathBuf>> {
     let (stamme, ext) = del_navn(til);
     if let Some(forelder) = mal.join(til).parent() {
         fs::create_dir_all(forelder)?;
@@ -140,7 +151,8 @@ fn kopier_en(kilde: &Path, mal: &Path, til: &Path, sha: &str, flytt: bool) -> Re
         frigi(&full);
         return Err(e);
     }
-    if let Ok(m) = fs::metadata(if flyttet { &tmp } else { kilde }).and_then(|m| m.modified()) {
+    let endret = dato.or_else(|| fs::metadata(if flyttet { &tmp } else { kilde }).and_then(|m| m.modified()).ok());
+    if let Some(m) = endret {
         let _ = fs::File::options().write(true).open(&tmp).and_then(|f| f.set_modified(m));
     }
     // Erstatter bare den tomme plassholderen vi laget selv.
@@ -149,6 +161,11 @@ fn kopier_en(kilde: &Path, mal: &Path, til: &Path, sha: &str, flytt: bool) -> Re
     }
     fs::rename(&tmp, &full)?;
     Ok(Some(rel))
+}
+
+/// Bildets dato (lokal tid der det ble tatt) som tidspunkt filsystemet forstår.
+fn systemtid(d: chrono::NaiveDateTime) -> Option<SystemTime> {
+    d.and_local_timezone(Local).earliest().map(SystemTime::from)
 }
 
 /// Fjerner den tomme plassholderen vi selv laget, hvis kopieringen feilet. Er den ikke tom lenger,

@@ -5,9 +5,12 @@ use anyhow::{Context, Result};
 use std::fs;
 use std::io::Write;
 use std::path::Path;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use windows::core::{GUID, PCWSTR, PWSTR};
 use windows::Win32::Devices::PortableDevices::*;
 use windows::Win32::Foundation::{GENERIC_READ, PROPERTYKEY};
+use windows::Win32::System::Com::StructuredStorage::PropVariantToFileTime;
+use windows::Win32::System::Variant::PSTF_UTC;
 use windows::Win32::System::Com::{
     CoCreateInstance, CoInitializeEx, CoTaskMemFree, IStream, CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED, STGM_READ,
 };
@@ -66,6 +69,16 @@ struct Objekt {
     navn: String,
     mappe: bool,
     storrelse: Option<u64>,
+    /// Når bildet ble lagret på telefonen. Uten dette får kopien dagens dato som endringstid.
+    dato: Option<SystemTime>,
+}
+
+/// FILETIME (100 ns siden 1601) til SystemTime. Urimelige verdier (før 1990 eller i framtiden) forkastes.
+fn systemtid(hoy: u32, lav: u32) -> Option<SystemTime> {
+    let ticks = ((hoy as u64) << 32) | lav as u64;
+    let sek = (ticks / 10_000_000).checked_sub(11_644_473_600)?;
+    let t = UNIX_EPOCH + Duration::from_secs(sek);
+    (sek > 631_152_000 && t <= SystemTime::now() + Duration::from_secs(86_400)).then_some(t)
 }
 
 struct Enhet {
@@ -93,7 +106,15 @@ impl Enhet {
         let ressurser = innhold.Transfer()?;
         let nokler: IPortableDeviceKeyCollection =
             CoCreateInstance(&PortableDeviceKeyCollection, None, CLSCTX_INPROC_SERVER)?;
-        for k in [WPD_OBJECT_NAME, WPD_OBJECT_ORIGINAL_FILE_NAME, WPD_OBJECT_CONTENT_TYPE, WPD_OBJECT_SIZE] {
+        for k in [
+            WPD_OBJECT_NAME,
+            WPD_OBJECT_ORIGINAL_FILE_NAME,
+            WPD_OBJECT_CONTENT_TYPE,
+            WPD_OBJECT_SIZE,
+            WPD_OBJECT_DATE_MODIFIED,
+            WPD_OBJECT_DATE_CREATED,
+            WPD_OBJECT_DATE_AUTHORED,
+        ] {
             nokler.Add(&k)?;
         }
         Ok(Enhet { innhold, egenskaper, ressurser, nokler })
@@ -123,12 +144,18 @@ impl Enhet {
             let typ: GUID = v.GetGuidValue(&WPD_OBJECT_CONTENT_TYPE).unwrap_or_default();
             let mappe = typ == WPD_CONTENT_TYPE_FOLDER || typ == WPD_CONTENT_TYPE_FUNCTIONAL_OBJECT;
             let storrelse = v.GetUnsignedLargeIntegerValue(&WPD_OBJECT_SIZE).ok();
-            ut.push(Objekt { id, navn, mappe, storrelse });
+            // Android oppgir som regel bare «endret», som for et bilde er når det ble tatt eller lagret.
+            let dato = [WPD_OBJECT_DATE_AUTHORED, WPD_OBJECT_DATE_CREATED, WPD_OBJECT_DATE_MODIFIED].iter().find_map(|k| {
+                let pv = v.GetValue(k).ok()?;
+                let ft = PropVariantToFileTime(&pv, PSTF_UTC).ok()?;
+                systemtid(ft.dwHighDateTime, ft.dwLowDateTime)
+            });
+            ut.push(Objekt { id, navn, mappe, storrelse, dato });
         }
         Ok(ut)
     }
 
-    unsafe fn kopier(&self, id: &str, til: &Path) -> Result<()> {
+    unsafe fn kopier(&self, id: &str, til: &Path, dato: Option<SystemTime>) -> Result<()> {
         let iw = bred(id);
         let mut optimal = 0u32;
         let mut strom: Option<IStream> = None;
@@ -146,7 +173,11 @@ impl Enhet {
             ut.write_all(&buf[..lest as usize])?;
         }
         ut.flush()?;
-        drop(ut);
+        let fil = ut.into_inner().map_err(|e| e.into_error())?;
+        if let Some(t) = dato {
+            fil.set_modified(t)?;
+        }
+        drop(fil);
         fs::rename(&tmp, til)?;
         Ok(())
     }
@@ -206,10 +237,14 @@ pub fn hent(telefon: &str, mal: &Path, fremdrift: &dyn Fn(usize, usize)) -> Resu
             fremdrift(n, total);
             let til = mappe.join(trygt(&o.navn));
             if allerede_hentet(&til, o.storrelse) {
+                // Eldre versjoner ga kopien dagens dato. Rett det opp, det endrer ingenting på telefonen.
+                if let Some(t) = o.dato {
+                    let _ = fs::File::options().write(true).open(&til).and_then(|f| f.set_modified(t));
+                }
                 h.fantes += 1;
                 continue;
             }
-            let res = fs::create_dir_all(&mappe).map_err(anyhow::Error::from).and_then(|_| enhet.kopier(&o.id, &til));
+            let res = fs::create_dir_all(&mappe).map_err(anyhow::Error::from).and_then(|_| enhet.kopier(&o.id, &til, o.dato));
             match res {
                 Ok(()) => h.hentet += 1,
                 Err(e) => h.feil.push(format!("{}: {e:#}", til.display())),

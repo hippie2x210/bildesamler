@@ -28,8 +28,12 @@ pub fn finn_filer(kilder: &[PathBuf], mal: &Path) -> Vec<PathBuf> {
             .filter_entry(|e| {
                 let navn = e.file_name().to_string_lossy();
                 let egen = navn == utfor::LOGGMAPPE || navn == utfor::GAMMEL_LOGGMAPPE || navn == utfor::ANGRET;
-                let er_mal = e.path().canonicalize().is_ok_and(|p| p == mal);
-                !(egen || er_mal)
+                // Skjulte mapper og filer under kilden: telefonens miniatyrer (DCIM/.thumbnails),
+                // papirkurven (.trashed-…) og halvferdige filer (.pending-…). Ikke bildene brukeren ser.
+                let skjult = e.depth() > 0 && navn.starts_with('.');
+                // Bare mapper sjekkes: canonicalize for hver fil er tregt på nettverksdisker og minnepinner.
+                let er_mal = e.file_type().is_dir() && e.path().canonicalize().is_ok_and(|p| p == mal);
+                !(egen || er_mal || skjult)
             })
             .filter_map(Result::ok)
         {

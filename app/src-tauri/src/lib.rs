@@ -1,6 +1,6 @@
 //! Skallet rundt kjernen: kommandoer grensesnittet kan kalle, og fremdrift tilbake.
 
-use cloudjumper_kjerne::{lag_plan, miniatyr, modell::{Datokilde, Tillit}, plan::Rolle, rapport, takeout, utfor, Plan};
+use cloudjumper_kjerne::{lag_plan, miniatyr, modell::{Datokilde, Tillit}, plan::{self, Rolle}, rapport, takeout, utfor, Plan};
 use cloudjumper_sky::{dropbox, google, onedrive};
 use serde::Serialize;
 use std::path::{Path, PathBuf};
@@ -37,6 +37,8 @@ struct FilVisning {
 struct GruppeVisning {
     indeks: usize,
     eksakt: bool,
+    /// Helt like filer, eller bare miniatyrer av originalen. Trenger ikke sjekkes av brukeren.
+    sikker: bool,
     filer: Vec<FilVisning>,
 }
 
@@ -48,6 +50,8 @@ struct Oversikt {
     uten_dato: Vec<FilVisning>,
     ulesbare: Vec<(String, String)>,
     varsler: Vec<String>,
+    /// Det er ikke plass til kopiene. Da skal kopieringen ikke kunne startes, for den ville fylt disken.
+    for_lite_plass: bool,
 }
 
 fn fil_visning(plan: &Plan, i: usize) -> FilVisning {
@@ -82,13 +86,19 @@ fn fil_visning(plan: &Plan, i: usize) -> FilVisning {
 }
 
 fn oversikt(plan: &Plan) -> Oversikt {
+    let har_handling: std::collections::HashSet<usize> = plan.handlinger.iter().map(|h| h.fil).collect();
     let grupper = plan
         .grupper
         .iter()
         .enumerate()
+        // Grupper med bare bilder som allerede ligger i samlingen, gjør ikke denne kopieringen noe med.
+        // De ble ellers vist til sjekk på nytt hver gang.
+        .filter(|(_, g)| std::iter::once(&g.original).chain(&g.duplikater).any(|i| har_handling.contains(i)))
         .map(|(gi, g)| GruppeVisning {
             indeks: gi,
             eksakt: g.eksakt,
+            sikker: g.eksakt
+                || g.duplikater.iter().all(|&d| plan::er_miniatyr(&plan.filer[d], &plan.filer[g.original])),
             filer: std::iter::once(g.original)
                 .chain(g.duplikater.iter().copied())
                 .map(|i| fil_visning(plan, i))
@@ -117,6 +127,7 @@ fn oversikt(plan: &Plan) -> Oversikt {
             .map(|(s, e)| (s.to_string_lossy().into_owned(), e.clone()))
             .collect(),
         varsler: varsler_for_mal(&plan.mal, plan.rapport.bytes_a_kopiere),
+        for_lite_plass: for_lite_plass(&plan.mal, plan.rapport.bytes_a_kopiere),
     }
 }
 
@@ -124,18 +135,20 @@ fn gb(bytes: u64) -> String {
     format!("{:.1} GB", bytes as f64 / 1e9).replace('.', ",")
 }
 
+/// Litt luft til mapper og loggen, så disken ikke blir helt full.
+fn for_lite_plass(mal: &Path, trengs: u64) -> bool {
+    trengs > 0 && utfor::ledig_plass(mal).is_some_and(|ledig| trengs + 200_000_000 > ledig)
+}
+
 /// Advarer hvis det ikke er plass, eller hvis målet synkes til skyen: da lastes hele samlingen opp igjen.
 fn varsler_for_mal(mal: &Path, trengs: u64) -> Vec<String> {
     let mut v = Vec::new();
-    // Litt luft til mapper og loggen, så disken ikke blir helt full.
-    if let Some(ledig) = utfor::ledig_plass(mal) {
-        if trengs + 200_000_000 > ledig {
-            v.push(format!(
-                "Det er ikke nok plass. Kopiene trenger {}, men det er bare {} ledig der samlingen skal ligge. Velg en større disk, eller rydd plass først.",
-                gb(trengs),
-                gb(ledig)
-            ));
-        }
+    if let Some(ledig) = utfor::ledig_plass(mal).filter(|_| for_lite_plass(mal, trengs)) {
+        v.push(format!(
+            "Det er ikke nok plass. Kopiene trenger {}, men det er bare {} ledig der samlingen skal ligge. Velg en større disk, eller rydd plass først.",
+            gb(trengs),
+            gb(ledig)
+        ));
     }
     for var in ["OneDrive", "OneDriveConsumer", "OneDriveCommercial"] {
         if let Some(rot) = std::env::var_os(var) {
@@ -166,9 +179,15 @@ async fn skann(app: AppHandle, tilstand: State<'_, Tilstand>, kilder: Vec<String
         if !k.is_dir() && !er_zip {
             return Err(format!("Finner ikke mappen {}", k.display()));
         }
+        // Samlingen selv blir aldri lest som kilde, så brukeren ville fått «ingenting nytt» uten å skjønne hvorfor.
+        if k.canonicalize().ok().is_some_and(|k| mal.canonicalize().is_ok_and(|m| m == k)) {
+            return Err("Du har valgt samlingen selv. Velg mappen eller disken bildene ligger på nå.".into());
+        }
     }
 
     let app2 = app.clone();
+    // Like bilder vises side om side med dem som allerede ligger i samlingen, så de må også kunne vises.
+    let _ = app.asset_protocol_scope().allow_directory(&mal, true);
     let (plan, takeout_varsler, kilder) = tauri::async_runtime::spawn_blocking(move || {
         // Takeout-zip-er pakkes ut i samlingens egen mappe først. Zip-filene røres ikke.
         let (kilder, varsler) = takeout::forbered_kilder(&kilder, &mal, &|ferdig, total| {
@@ -297,7 +316,8 @@ fn google_klient(app: &AppHandle) -> Result<google::Klient, String> {
 /// App-ID-en fra Azure (ikke hemmelig). Bygges inn fra CLOUDJUMPER_ONEDRIVE_KLIENT, eller leses fra
 /// onedrive-klient.txt i appens innstillingsmappe eller ved siden av programmet.
 fn onedrive_klient(app: &AppHandle) -> Option<onedrive::Klient> {
-    let id = option_env!("CLOUDJUMPER_ONEDRIVE_KLIENT").map(str::to_string).or_else(|| {
+    // Mangler hemmeligheten i GitHub, bygges en tom streng inn. Da skal filen brukes i stedet.
+    let id = option_env!("CLOUDJUMPER_ONEDRIVE_KLIENT").filter(|s| !s.trim().is_empty()).map(str::to_string).or_else(|| {
         let mut steder = Vec::new();
         if let Ok(d) = app.path().app_config_dir() {
             steder.push(d.join("onedrive-klient.txt"));
@@ -362,7 +382,7 @@ async fn onedrive_hent(app: AppHandle, mal: String) -> Result<onedrive::Henting,
 /// App-nøkkelen fra Dropbox (ikke hemmelig). Bygges inn fra CLOUDJUMPER_DROPBOX_NOKKEL, eller leses fra
 /// dropbox-nokkel.txt i appens innstillingsmappe eller ved siden av programmet.
 fn dropbox_klient(app: &AppHandle) -> Option<dropbox::Klient> {
-    let nokkel = option_env!("CLOUDJUMPER_DROPBOX_NOKKEL").map(str::to_string).or_else(|| {
+    let nokkel = option_env!("CLOUDJUMPER_DROPBOX_NOKKEL").filter(|s| !s.trim().is_empty()).map(str::to_string).or_else(|| {
         let mut steder = Vec::new();
         if let Ok(d) = app.path().app_config_dir() {
             steder.push(d.join("dropbox-nokkel.txt"));
@@ -655,17 +675,22 @@ fn nedlastingsmappe(app: &AppHandle, mal: Option<&str>) -> Result<PathBuf, Strin
     Ok(mappe)
 }
 
+/// Hvor Google-vinduet legger nedlastingene akkurat nå.
+static NEDLASTINGSMAPPE: Mutex<Option<PathBuf>> = Mutex::new(None);
+
 /// Åpner (eller bytter side i) CloudJumper sitt eget Google-vindu. Brukeren forlater aldri appen,
 /// og nedlastinger fanges opp og legges i `nedlastet`-mappen i stedet for i Nedlastinger.
 fn apne_google_vindu(app: &AppHandle, adresse: &str, mal: Option<&str>) -> Result<(), String> {
     let url: tauri::Url = adresse.parse().map_err(|e| format!("{e}"))?;
+    // Mappen bestemmes hver gang, så nedlastinger følger samlingen hvis brukeren har byttet den
+    // mens Google-vinduet var åpent. Ellers havnet zip-ene i den gamle samlingen og ble aldri sortert.
+    *NEDLASTINGSMAPPE.lock().unwrap() = Some(nedlastingsmappe(app, mal)?);
     if let Some(vindu) = app.get_webview_window("google") {
         vindu.navigate(url).map_err(|e| e.to_string())?;
         let _ = vindu.unminimize();
         let _ = vindu.set_focus();
         return Ok(());
     }
-    let mappe = nedlastingsmappe(app, mal)?;
     let app2 = app.clone();
     let app3 = app.clone();
     let vindu = tauri::WebviewWindowBuilder::new(app, "google", tauri::WebviewUrl::External(url))
@@ -703,6 +728,7 @@ fn apne_google_vindu(app: &AppHandle, adresse: &str, mal: Option<&str>) -> Resul
             match hendelse {
                 tauri::webview::DownloadEvent::Requested { destination, .. } => {
                     let navn = destination.file_name().map(|n| n.to_os_string()).unwrap_or_else(|| "takeout.zip".into());
+                    let Some(mappe) = NEDLASTINGSMAPPE.lock().unwrap().clone() else { return false };
                     *destination = mappe.join(navn);
                     if er_ferdig(&mappe, destination) {
                         // Hentet før: hopp over og gå videre til neste.
@@ -725,8 +751,11 @@ fn apne_google_vindu(app: &AppHandle, adresse: &str, mal: Option<&str>) -> Resul
                     );
                 }
                 tauri::webview::DownloadEvent::Finished { path, success, .. } => {
+                    // Listen over ferdige filer ligger i mappen filen faktisk ble lagret i.
                     if let (Some(p), true) = (&path, success) {
-                        merk_ferdig(&mappe, p);
+                        if let Some(mappe) = p.parent() {
+                            merk_ferdig(mappe, p);
+                        }
                     }
                     let i_ko = {
                         let mut ko = KO.lock().unwrap();

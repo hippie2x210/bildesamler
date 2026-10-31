@@ -95,14 +95,20 @@ $("velgMal").addEventListener("click", async () => {
 listen("fremdrift", ({ payload }) => {
   const { fase, ferdig, total } = payload;
   $("fremdrift").hidden = false;
-  const tekst = { skanner: "Leser filer", "pakker ut": "Pakker ut Google Takeout" }[fase] ?? "Kopierer";
+  const tekst = {
+    skanner: "Leser filer",
+    "pakker ut": "Pakker ut Google Takeout",
+    telefon: "Henter fra telefonen",
+    onedrive: "Henter fra OneDrive",
+    dropbox: "Henter fra Dropbox",
+  }[fase] ?? "Kopierer";
   $("fremdriftTekst").textContent = `${tekst}: ${ferdig} av ${total}`;
   $("fremdriftLinje").style.width = total ? `${(100 * ferdig) / total}%` : "0";
 });
 
 function opptatt(ja) {
   for (const id of ["skann", "kopier", "angre", "leggTilKilde", "leggTilTakeout", "fjernKilde", "velgMal"]) {
-    $(id).disabled = ja || (id === "kopier" && !oversikt);
+    $(id).disabled = ja || (id === "kopier" && (!oversikt || oversikt.for_lite_plass));
   }
 }
 
@@ -196,7 +202,7 @@ for (const fane of document.querySelectorAll('[role="tab"]')) {
 function visResultat() {
   const o = oversikt;
   $("resultat").hidden = false;
-  $("kopier").disabled = false;
+  $("kopier").disabled = !!o.for_lite_plass;
 
   const varsler = [...o.varsler];
   if (o.ulesbare.length) varsler.push(`${o.ulesbare.length} filer kunne ikke leses og blir ikke kopiert.`);
@@ -216,6 +222,7 @@ function visResultat() {
       rad("Bilder som sorteres i Bilder/År/Måned", r.bilder),
       rad("Videoer som sorteres i Videoer/År/Måned", r.videoer),
       rad("Duplikater (legges i «Duplikater»)", `${r.duplikater} (${storrelse(r.duplikat_bytes)})`),
+      rad("  … av dem små miniatyrbilder (Duplikater/Miniatyrbilder)", r.miniatyrer ?? 0),
       rad("Uten sikker dato (legges i «Uten dato»)", r.uten_dato),
       rad("Filer med advarsel", r.med_advarsel),
       rad("Kunne ikke leses", r.ulesbare),

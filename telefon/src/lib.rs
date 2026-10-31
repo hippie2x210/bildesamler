@@ -34,6 +34,10 @@ pub const MEDIETYPER: &[&str] = &[
 
 /// Skal vi gå inn i denne mappen? `sti` er mappenavnene fra lagringsområdets rot, med små bokstaver.
 pub fn interessant(sti: &[String]) -> bool {
+    // Skjulte mapper er telefonens egne miniatyrer (.thumbnails) og papirkurv, ikke bilder brukeren har.
+    if sti.iter().any(|d| d.starts_with('.')) {
+        return false;
+    }
     let Some(forste) = sti.first() else { return true };
     if TOPPMAPPER.contains(&forste.as_str()) {
         return true;
@@ -43,7 +47,8 @@ pub fn interessant(sti: &[String]) -> bool {
 }
 
 pub fn er_media(navn: &str) -> bool {
-    navn.rsplit_once('.').is_some_and(|(_, e)| MEDIETYPER.contains(&e.to_lowercase().as_str()))
+    // «.trashed-…» og «.pending-…» er slettede eller halvferdige bilder.
+    !navn.starts_with('.') && navn.rsplit_once('.').is_some_and(|(_, e)| MEDIETYPER.contains(&e.to_lowercase().as_str()))
 }
 
 /// Gjør et navn fra telefonen trygt som mappenavn på Windows.
@@ -104,6 +109,7 @@ mod tester {
         assert!(interessant(&s(&["android", "media", "com.whatsapp", "whatsapp", "media", "whatsapp images"])));
         assert!(!interessant(&s(&["android", "data"])));
         assert!(!interessant(&s(&["music"])));
+        assert!(!interessant(&s(&["dcim", ".thumbnails"])));
     }
 
     #[test]
@@ -112,6 +118,7 @@ mod tester {
         assert!(er_media("VID_20190704.mp4"));
         assert!(!er_media("notat.txt"));
         assert!(!er_media("uten_endelse"));
+        assert!(!er_media(".trashed-1700000000-IMG_0001.jpg"));
     }
 
     #[test]

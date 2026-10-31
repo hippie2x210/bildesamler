@@ -38,6 +38,9 @@ pub fn tekst(plan: &Plan, res: &Resultat, kilde: &str) -> String {
     let _ = writeln!(t, "Kopiert nå: {}", res.kopiert);
     let _ = writeln!(t, "  Bilder og videoer sortert i år og måned: {}", antall(Rolle::Original));
     let _ = writeln!(t, "  Lagt i «Duplikater» fordi de finnes fra før: {}", antall(Rolle::Duplikat));
+    if plan.rapport.miniatyrer > 0 {
+        let _ = writeln!(t, "    … av dem små miniatyrbilder, i «Duplikater/Miniatyrbilder»: {}", plan.rapport.miniatyrer);
+    }
     let _ = writeln!(t, "  Lagt i «Uten dato»: {}", antall(Rolle::UtenDato));
     let i_samlingen = plan.rapport.allerede_i_samlingen + res.allerede_der;
     if i_samlingen > 0 {

@@ -21,10 +21,12 @@ pub fn fra_filnavn(navn: &str) -> Option<NaiveDateTime> {
     let c = re.captures(navn)?;
     let tall = |i: usize| c.get(i).map(|m| m.as_str().parse::<u32>().unwrap_or(99));
     let dato = NaiveDate::from_ymd_opt(tall(1)? as i32, tall(2)?, tall(3)?)?;
+    // Et klokkeslett som ikke finnes (for eksempel et løpenummer etter datoen), gir bare datoen.
     let tid = match (tall(4), tall(5), tall(6)) {
         (Some(t), Some(m), Some(s)) => dato.and_hms_opt(t, m, s),
-        _ => dato.and_hms_opt(12, 0, 0),
-    }?;
+        _ => None,
+    }
+    .or_else(|| dato.and_hms_opt(12, 0, 0))?;
     sannsynlig(tid).then_some(tid)
 }
 
@@ -111,6 +113,7 @@ mod tester {
         assert_eq!(fra_filnavn("Screenshot_20200310-143005.png"), Some(d("2020-03-10 14:30:05")));
         assert_eq!(fra_filnavn("2019-07-04 12.00.00.jpg"), Some(d("2019-07-04 12:00:00")));
         assert_eq!(fra_filnavn("VID_20230317_084500.mp4"), Some(d("2023-03-17 08:45:00")));
+        assert_eq!(fra_filnavn("IMG_20190704_998877.jpg"), Some(d("2019-07-04 12:00:00")));
     }
 
     #[test]

@@ -12,6 +12,13 @@
       <div class="title-bar-text">CloudJumper – samle bildene dine på ett sted</div>
     </div>
     <div class="window-body">
+      <!-- Hvor langt brukeren har kommet. Skjules på startsiden, der det ikke er valgt noe ennå. -->
+      <ol class="stegvis" id="vvStegvis" hidden>
+        <li>Velg bildene</li>
+        <li>CloudJumper leser</li>
+        <li>Se over</li>
+        <li>Kopier</li>
+      </ol>
       <!-- Hver side er ett steg. Bare én vises om gangen. -->
       <section data-steg="start">
         <h1>Hei! Hvor er bildene dine?</h1>
@@ -102,7 +109,8 @@
       <section data-steg="jobber" hidden>
         <h1 id="vvJobberTittel">Leser bildene …</h1>
         <p class="stor-tekst" id="vvJobberTekst">Dette kan ta en stund. Du kan gjøre andre ting imens.</p>
-        <div class="fremdrift"><div class="linje stor-linje"><div id="vvLinje"></div></div></div>
+        <div class="fremdrift"><div class="linje stor-linje ukjent" id="vvLinjeBoks"><div id="vvLinje"></div></div></div>
+        <p class="prosent" id="vvProsent"></p>
       </section>
 
       <section data-steg="klar" hidden>
@@ -110,30 +118,34 @@
         <ul class="funn" id="vvFunn"></ul>
         <div class="varsel stor-varsel" id="vvVarsler" hidden></div>
         <p class="liten" id="vvKopierTil"></p>
-        <button class="stor-knapp hoved-knapp" id="vvKopier">Kopier bildene til samlingen</button>
-        <button class="stor-knapp" id="vvSeLike" hidden>Se de like bildene side om side</button>
+        <div class="knapperad" id="vvKlarKnapper">
+          <button class="stor-knapp hoved-knapp" id="vvKopier">Kopier bildene til samlingen</button>
+          <button class="stor-knapp" id="vvSeLike" hidden>Se de like bildene side om side</button>
+        </div>
         <p class="liten">Ingenting er kopiert ennå. Vil du se alle detaljene først? <a href="#" id="vvDetaljer">Vis detaljer</a></p>
         <button class="tilbake" data-gaa="start">‹ Avbryt</button>
       </section>
 
       <section data-steg="like" hidden>
         <h1 id="vvLikeTittel">Like bilder</h1>
-        <p class="stor-tekst">CloudJumper beholder bildet til venstre i samlingen. Det til høyre legges i «Duplikater», så ingenting forsvinner.</p>
+        <p class="stor-tekst">CloudJumper har valgt det beste bildet og beholder det til venstre i samlingen. Det til høyre legges i «Duplikater», så ingenting forsvinner. Er valget feil, trykk «Behold heller denne».</p>
         <div class="par" id="vvPar"></div>
         <div class="knapperad">
           <button class="stor-knapp" id="vvForrige">‹ Forrige</button>
           <button class="stor-knapp" id="vvNeste">Neste ›</button>
+          <button class="stor-knapp hoved-knapp" id="vvLikeFerdig" hidden>Ferdig, tilbake til oversikten</button>
         </div>
         <button class="tilbake" id="vvTilOversikt">‹ Tilbake til oversikten</button>
       </section>
 
       <section data-steg="ferdig" hidden>
-        <h1>Ferdig! 🎉</h1>
+        <h1 class="ferdig-tittel"><span class="hake" aria-hidden="true">✔</span> Ferdig!</h1>
         <p class="stor-tekst" id="vvFerdigTekst"></p>
+        <ul class="feil liten" id="vvFeilListe" hidden></ul>
         <button class="stor-knapp hoved-knapp" id="vvApne">Se bildene</button>
         <p class="liten">I samlingen ligger filen «Hva CloudJumper har gjort.txt» med en oversikt over alt som er gjort.</p>
-        <p class="liten">Ble noe feil? <a href="#" id="vvAngre">Angre denne kopieringen</a></p>
-        <button class="tilbake" data-gaa="start">Til start</button>
+        <p class="liten" id="vvAngreLinje">Ble noe feil? <a href="#" id="vvAngre">Angre denne kopieringen</a></p>
+        <button class="tilbake" data-gaa="start">Hent flere bilder</button>
       </section>
 
       <div id="vvFeil" class="feil stor-tekst" hidden></div>
