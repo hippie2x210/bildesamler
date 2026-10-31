@@ -340,8 +340,13 @@ function visFunn() {
     ...linjer.map(([ikon, tall, tekst]) => el("li", {}, el("span", { class: "ikon", "aria-hidden": "true" }, ikon), el("b", {}, tall), ` ${tekst}`))
   );
   const nytt = r.bilder + r.videoer + r.duplikater + r.uten_dato;
-  if (!nytt) $("vvFunn").append(el("li", {}, "Ingenting nytt å kopiere. Alt er allerede i samlingen."));
-  $("vvKopier").disabled = nytt === 0;
+  if (!r.filer) {
+    // Tom kilde: si det rett ut i stedet for «0 bilder sorteres».
+    $("vvFunn").replaceChildren(el("li", {}, "Fant ingen bilder eller videoer her. Er det riktig mappe eller telefon?"));
+  } else if (!nytt) {
+    $("vvFunn").append(el("li", {}, "Ingenting nytt å kopiere. Alt er allerede i samlingen."));
+  }
+  $("vvKopier").disabled = nytt === 0 || oversikt.for_lite_plass;
   $("vvKopierTil").textContent = nytt ? `Kopiene legges i ${samling()}.` : "";
   // CloudJumper har valgt hvilket bilde som beholdes i hver gruppe. Helt like filer og miniatyrer er sikre;
   // resten bør brukeren se over før kopieringen.

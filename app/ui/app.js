@@ -108,7 +108,7 @@ listen("fremdrift", ({ payload }) => {
 
 function opptatt(ja) {
   for (const id of ["skann", "kopier", "angre", "leggTilKilde", "leggTilTakeout", "fjernKilde", "velgMal"]) {
-    $(id).disabled = ja || (id === "kopier" && !oversikt);
+    $(id).disabled = ja || (id === "kopier" && (!oversikt || oversikt.for_lite_plass));
   }
 }
 
@@ -202,7 +202,7 @@ for (const fane of document.querySelectorAll('[role="tab"]')) {
 function visResultat() {
   const o = oversikt;
   $("resultat").hidden = false;
-  $("kopier").disabled = false;
+  $("kopier").disabled = !!o.for_lite_plass;
 
   const varsler = [...o.varsler];
   if (o.ulesbare.length) varsler.push(`${o.ulesbare.length} filer kunne ikke leses og blir ikke kopiert.`);

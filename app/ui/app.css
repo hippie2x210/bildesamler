@@ -234,3 +234,7 @@ body.stor-skrift .veiviser .window-body { zoom: 1.25; }
 .veiviser .trinn:not(.na) p:not(.liten) { color: #555; }
 .veiviser .trinn.gjort p { display: none; }
 .veiviser .stegvis + section h1, .veiviser section h1 { margin-top: 2px; }
+
+/* Startsiden: tre valg i bredden når det er plass, så alle fem synes uten å bla, også med større tekst. */
+#veiviser [data-steg="start"] .store-valg { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+.veiviser button.stor { width: auto; min-height: 120px; }
