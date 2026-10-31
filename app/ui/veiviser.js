@@ -15,6 +15,7 @@ function visSteg(navn) {
   for (const s of document.querySelectorAll("#veiviser [data-steg]")) s.hidden = s.dataset.steg !== navn;
   $("vvFeil").hidden = true;
   if (navn === "google") oppdaterGoogle();
+  if (navn === "start") visHvor();
 }
 
 // Viser at noe skjer mens en knapp jobber, så ingen tror appen har hengt seg.
@@ -129,8 +130,7 @@ $("vvGoogleSorter").addEventListener("click", async () => {
     const mappe = await invoke("google_nedlastingsmappe", { mal: samling() });
     vv.kilder = [mappe];
     vv.fra = "google";
-    visSteg("samling");
-    $("vvSamling").textContent = samling();
+    fortsett();
   } catch (e) {
     vvFeil(e);
   }
@@ -156,9 +156,32 @@ function velgTelefon(t) {
   vv.telefon = t;
   vv.kilder = [];
   vv.fra = "telefon";
-  visSteg("samling");
-  $("vvSamling").textContent = samling();
+  fortsett();
 }
+
+// --- OneDrive ---
+
+$("vvOneDriveLoggInn").addEventListener("click", () =>
+  travel($("vvOneDriveLoggInn"), "Venter på innlogging i nettleseren …", async () => {
+    const navn = await invoke("onedrive_logg_inn");
+    $("vvOneDriveTekst").textContent = `Logget inn som ${navn}.`;
+    vv.kilder = [];
+    vv.fra = "onedrive";
+    fortsett();
+  })
+);
+
+// --- Dropbox ---
+
+$("vvDropboxLoggInn").addEventListener("click", () =>
+  travel($("vvDropboxLoggInn"), "Venter på innlogging i nettleseren …", async () => {
+    const navn = await invoke("dropbox_logg_inn");
+    $("vvDropboxTekst").textContent = `Logget inn som ${navn}.`;
+    vv.kilder = [];
+    vv.fra = "dropbox";
+    fortsett();
+  })
+);
 
 // --- Mappe ---
 
@@ -167,11 +190,36 @@ $("vvVelgMappe").addEventListener("click", async () => {
   if (!valgt) return;
   vv.kilder = [valgt];
   vv.fra = "mappe";
-  visSteg("samling");
-  $("vvSamling").textContent = samling();
+  fortsett();
 });
 
 // --- Samling og skanning ---
+
+// Første gang spør vi hvor samlingen skal ligge. Etterpå brukes samme sted, så det er ett steg mindre.
+// Stedet vises på startsiden og kan byttes der.
+function fortsett() {
+  if (hent("mal", "")) return kjor();
+  visSteg("samling");
+  $("vvSamling").textContent = samling();
+}
+
+function visHvor() {
+  const mal = hent("mal", "");
+  $("vvHvor").hidden = !mal;
+  $("vvHvorSti").textContent = mal;
+  const sist = hent("sist", null);
+  $("vvSist").hidden = !sist;
+  if (sist) $("vvSist").textContent = `Sist: ${datoTekst(sist.tid)} ble ${antall(sist.kopiert, "bilde", "bilder")} kopiert fra ${sist.kilde}.`;
+}
+
+$("vvEndreSamling").addEventListener("click", async (e) => {
+  e.preventDefault();
+  const valgt = await open({ directory: true, title: "Velg hvor bildene skal samles" });
+  if (!valgt) return;
+  lagre("mal", valgt);
+  $("mal").value = valgt;
+  visHvor();
+});
 
 $("vvVelgSamling").addEventListener("click", async () => {
   const valgt = await open({ directory: true, title: "Velg hvor bildene skal samles" });
@@ -181,7 +229,9 @@ $("vvVelgSamling").addEventListener("click", async () => {
   $("vvSamling").textContent = valgt;
 });
 
-$("vvBrukSamling").addEventListener("click", async () => {
+$("vvBrukSamling").addEventListener("click", () => kjor());
+
+async function kjor() {
   const mal = samling();
   if (!mal) return vvFeil("Velg hvor bildene skal samles.");
   lagre("mal", mal);
@@ -200,12 +250,24 @@ $("vvBrukSamling").addEventListener("click", async () => {
       return vvFeil(e);
     }
   }
+  if (vv.fra === "onedrive" || vv.fra === "dropbox") {
+    $("vvJobberTittel").textContent = `Henter bildene fra ${kildeNavn()} …`;
+    $("vvJobberTekst").textContent = "Dette kan ta lang tid på et tregt nett. Bilder som er hentet før, hentes ikke på nytt.";
+    try {
+      const h = await invoke(`${vv.fra}_hent`, { mal });
+      vv.kilder = [h.mappe];
+      vv.telefonFeil = h.feil;
+    } catch (e) {
+      visSteg(vv.fra);
+      return vvFeil(e);
+    }
+  }
   $("vvJobberTittel").textContent = "Leser bildene …";
   $("vvJobberTekst").textContent = "CloudJumper ser på hvert bilde for å finne riktig dato og like bilder. Ingenting kopieres ennå.";
   try {
     oversikt = await invoke("skann", { kilder: vv.kilder, mal });
-    if (vv.fra === "telefon" && vv.telefonFeil?.length) {
-      oversikt.varsler.push(`${vv.telefonFeil.length} filer kunne ikke hentes fra telefonen. Koble til på nytt og prøv igjen, så hentes bare de som mangler.`);
+    if (["telefon", "onedrive", "dropbox"].includes(vv.fra) && vv.telefonFeil?.length) {
+      oversikt.varsler.push(`${vv.telefonFeil.length} filer kunne ikke hentes fra ${vv.fra === "telefon" ? "telefonen" : kildeNavn()}. Prøv igjen senere, så hentes bare de som mangler.`);
     }
     settKilder(vv.kilder);
     visteGrupper = SIDE;
@@ -215,12 +277,14 @@ $("vvBrukSamling").addEventListener("click", async () => {
     visSteg(vv.fra);
     vvFeil(e);
   }
-});
+}
 
 listen("fremdrift", ({ payload }) => {
   const { fase, ferdig, total } = payload;
   $("vvLinje").style.width = total ? `${(100 * ferdig) / total}%` : "0";
-  if (fase === "telefon") $("vvJobberTittel").textContent = `Henter bildene fra telefonen … (${ferdig} av ${total})`;
+  if (fase === "dropbox") $("vvJobberTittel").textContent = `Henter bildene fra Dropbox … (${ferdig} av ${total})`;
+  else if (fase === "onedrive") $("vvJobberTittel").textContent = `Henter bildene fra OneDrive … (${ferdig} av ${total})`;
+  else if (fase === "telefon") $("vvJobberTittel").textContent = `Henter bildene fra telefonen … (${ferdig} av ${total})`;
   else if (fase === "pakker ut") $("vvJobberTittel").textContent = "Pakker opp filene fra Google …";
   else if (fase === "skanner") $("vvJobberTittel").textContent = `Leser bildene … (${ferdig} av ${total})`;
   else $("vvJobberTittel").textContent = `Kopierer … (${ferdig} av ${total})`;
@@ -241,9 +305,16 @@ function visFunn() {
     r.takeout_albumkopier
       ? `${antall(r.takeout_albumkopier, "bilde", "bilder")} lå i flere Google-album og kopieres bare én gang`
       : null,
+    r.allerede_i_samlingen
+      ? `${antall(r.allerede_i_samlingen, "bilde", "bilder")} er allerede i samlingen og hoppes over`
+      : null,
   ].filter(Boolean);
   $("vvFunn").replaceChildren(...linjer.map((l) => el("li", {}, l)));
-  $("vvKopier").disabled = r.filer === 0;
+  const nytt = r.bilder + r.videoer + r.duplikater + r.uten_dato;
+  if (!nytt) $("vvFunn").append(el("li", {}, "Ingenting nytt å kopiere. Alt er allerede i samlingen."));
+  $("vvKopier").disabled = nytt === 0;
+  $("vvKopierTil").textContent = nytt ? `Kopiene legges i ${samling()}.` : "";
+  $("vvSeLike").hidden = !oversikt.grupper.length;
   visSteg("klar");
   const varsler = oversikt.varsler;
   $("vvVarsler").hidden = !varsler.length;
@@ -264,7 +335,8 @@ $("vvKopier").addEventListener("click", async () => {
     ? "La CloudJumper være åpen til den er ferdig. Skjermen holdes på så lenge."
     : "Du kan gå fra PC-en. CloudJumper sier fra når den er ferdig.";
   try {
-    const res = await invoke("kopier");
+    const res = await invoke("kopier", { kilde: kildeNavn() });
+    lagre("sist", { tid: Date.now(), kopiert: res.kopiert, kilde: kildeNavn() });
     const deler = [`${antall(res.kopiert, "bilde", "bilder")} er kopiert til samlingen.`];
     if (res.allerede_der) deler.push(`${antall(res.allerede_der, "bilde", "bilder")} lå der fra før.`);
     if (res.feil.length) deler.push(`${antall(res.feil.length, "fil", "filer")} kunne ikke kopieres. Se «Avansert visning».`);
@@ -278,6 +350,95 @@ $("vvKopier").addEventListener("click", async () => {
 });
 
 $("vvApne").addEventListener("click", () => invoke("apne_mappe", { sti: samling() }).catch(vvFeil));
+
+function kildeNavn() {
+  if (vv.fra === "google") return "Google Foto";
+  if (vv.fra === "telefon") return vv.telefon?.navn ?? "mobilen";
+  if (vv.fra === "onedrive") return "OneDrive";
+  if (vv.fra === "dropbox") return "Dropbox";
+  return vv.kilder[0] ?? "en mappe";
+}
+
+$("vvAngre").addEventListener("click", async (e) => {
+  e.preventDefault();
+  const ok = await sporBruker(
+    "Angre kopieringen?\n\nKopiene som nettopp ble laget, flyttes til mappen «_Angret» i samlingen. Originalene røres ikke, og ingenting slettes.",
+    { title: "Angre", kind: "warning", okLabel: "Angre", cancelLabel: "Nei, behold dem" }
+  );
+  if (!ok) return;
+  try {
+    const n = await invoke("angre", { mal: samling() });
+    $("vvFerdigTekst").textContent = `Angret. ${antall(n, "fil", "filer")} er flyttet til «_Angret» i samlingen.`;
+    lagre("sist", null);
+  } catch (err) {
+    vvFeil(err);
+  }
+});
+
+// --- Like bilder side om side ---
+
+// Én gruppe om gangen med store bilder. Enklere å se enn den lange listen i den avanserte visningen.
+let likeNr = 0;
+
+function storKort(f, merke, knapp) {
+  return el("div", { class: "stort-kort" },
+    el("div", { class: "merke" }, merke),
+    el("img", { src: convertFileSrc(f.sti, "mini"), alt: f.navn, onerror: skjulBilde }),
+    el("div", {}, el("b", {}, f.navn)),
+    el("div", {}, `${f.bredde} × ${f.hoyde} punkter, ${storrelse(f.storrelse)}`),
+    el("div", {}, f.dato ? `Tatt ${f.dato}` : "Ingen dato"),
+    knapp
+  );
+}
+
+function visLike() {
+  const grupper = oversikt.grupper;
+  likeNr = Math.max(0, Math.min(likeNr, grupper.length - 1));
+  const g = grupper[likeNr];
+  $("vvLikeTittel").textContent = `Like bilder (${likeNr + 1} av ${grupper.length})`;
+  const [orig, ...andre] = g.filer;
+  $("vvPar").replaceChildren(
+    storKort(orig, "✔ Beholdes", null),
+    ...andre.map((f) =>
+      storKort(f, "Legges i «Duplikater»",
+        el("button", { class: "stor-knapp", onclick: () => byttOriginal(g.indeks, f.indeks) }, "Behold heller denne"))
+    )
+  );
+  $("vvForrige").disabled = likeNr === 0;
+  $("vvNeste").disabled = likeNr >= grupper.length - 1;
+}
+
+async function byttOriginal(gruppe, fil) {
+  try {
+    oversikt = await invoke("sett_original", { gruppe, fil });
+    visDuplikater();
+    visLike();
+  } catch (e) {
+    vvFeil(e);
+  }
+}
+
+$("vvSeLike").addEventListener("click", () => {
+  likeNr = 0;
+  visSteg("like");
+  visLike();
+});
+$("vvForrige").addEventListener("click", () => { likeNr--; visLike(); });
+$("vvNeste").addEventListener("click", () => { likeNr++; visLike(); });
+$("vvTilOversikt").addEventListener("click", () => visSteg("klar"));
+
+// --- Større tekst ---
+
+function storTekst(ja) {
+  document.body.classList.toggle("stor-skrift", ja);
+  $("vvStorTekst").textContent = ja ? "Vanlig tekst" : "Større tekst";
+  lagre("storTekst", ja);
+}
+
+$("vvStorTekst").addEventListener("click", (e) => {
+  e.preventDefault();
+  storTekst(!hent("storTekst", false));
+});
 
 // --- Bytte mellom enkel og avansert visning ---
 
@@ -300,9 +461,18 @@ $("tilVeiviser").addEventListener("click", () => visAvansert(false));
 // --- Oppstart ---
 
 (async () => {
-  visAvansert(hent("avansert", false));
+  // Appen starter alltid i den enkle visningen, så den som låner PC-en etterpå ikke møter den avanserte.
+  visAvansert(false);
+  storTekst(hent("storTekst", false));
+  visHvor();
   try {
     vv.status = await invoke("google_status");
+  } catch {}
+  try {
+    $("vvOneDriveValg").hidden = !(await invoke("onedrive_status")).satt_opp;
+  } catch {}
+  try {
+    $("vvDropboxValg").hidden = !(await invoke("dropbox_status")).satt_opp;
   } catch {}
   if (!$("mal").value && vv.status?.standard_samling) $("mal").placeholder = vv.status.standard_samling;
 })();

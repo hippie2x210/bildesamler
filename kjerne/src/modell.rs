@@ -50,6 +50,9 @@ pub struct Fil {
     pub datokilde: Datokilde,
     pub tillit: Tillit,
     pub advarsler: Vec<String>,
+    /// Ligger allerede i samlingen fra en tidligere kjøring. Kopieres aldri, men brukes til å finne duplikater.
+    #[serde(default)]
+    pub i_samlingen: bool,
 }
 
 impl Fil {

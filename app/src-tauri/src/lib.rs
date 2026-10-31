@@ -1,7 +1,7 @@
 //! Skallet rundt kjernen: kommandoer grensesnittet kan kalle, og fremdrift tilbake.
 
-use cloudjumper_kjerne::{lag_plan, miniatyr, modell::{Datokilde, Tillit}, plan::Rolle, takeout, utfor, Plan};
-use cloudjumper_sky::google;
+use cloudjumper_kjerne::{lag_plan, miniatyr, modell::{Datokilde, Tillit}, plan::Rolle, rapport, takeout, utfor, Plan};
+use cloudjumper_sky::{dropbox, google, onedrive};
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -97,8 +97,9 @@ fn oversikt(plan: &Plan) -> Oversikt {
                 .collect(),
         })
         .collect();
+    // Bilder som allerede er i samlingen, er vist før og gjentas ikke.
     let advarsler = (0..plan.filer.len())
-        .filter(|&i| !plan.filer[i].advarsler.is_empty())
+        .filter(|&i| !plan.filer[i].advarsler.is_empty() && !plan.filer[i].i_samlingen)
         .map(|i| fil_visning(plan, i))
         .collect();
     let uten_dato = plan
@@ -117,13 +118,27 @@ fn oversikt(plan: &Plan) -> Oversikt {
             .iter()
             .map(|(s, e)| (s.to_string_lossy().into_owned(), e.clone()))
             .collect(),
-        varsler: varsler_for_mal(&plan.mal),
+        varsler: varsler_for_mal(&plan.mal, plan.rapport.bytes_a_kopiere),
     }
 }
 
-/// Advarer hvis målet synkes til skyen: da lastes hele samlingen opp igjen.
-fn varsler_for_mal(mal: &Path) -> Vec<String> {
+fn gb(bytes: u64) -> String {
+    format!("{:.1} GB", bytes as f64 / 1e9).replace('.', ",")
+}
+
+/// Advarer hvis det ikke er plass, eller hvis målet synkes til skyen: da lastes hele samlingen opp igjen.
+fn varsler_for_mal(mal: &Path, trengs: u64) -> Vec<String> {
     let mut v = Vec::new();
+    // Litt luft til mapper og loggen, så disken ikke blir helt full.
+    if let Some(ledig) = utfor::ledig_plass(mal) {
+        if trengs + 200_000_000 > ledig {
+            v.push(format!(
+                "Det er ikke nok plass. Kopiene trenger {}, men det er bare {} ledig der samlingen skal ligge. Velg en større disk, eller rydd plass først.",
+                gb(trengs),
+                gb(ledig)
+            ));
+        }
+    }
     for var in ["OneDrive", "OneDriveConsumer", "OneDriveCommercial"] {
         if let Some(rot) = std::env::var_os(var) {
             if !rot.is_empty() && mal.starts_with(&rot) {
@@ -191,15 +206,18 @@ fn sett_original(tilstand: State<'_, Tilstand>, gruppe: usize, fil: usize) -> Re
 }
 
 #[tauri::command]
-async fn kopier(app: AppHandle, tilstand: State<'_, Tilstand>) -> Result<utfor::Resultat, String> {
+async fn kopier(app: AppHandle, tilstand: State<'_, Tilstand>, kilde: Option<String>) -> Result<utfor::Resultat, String> {
     let plan = tilstand.0.lock().unwrap().clone().ok_or("Skann først.")?;
     std::fs::create_dir_all(&plan.mal).map_err(|e| format!("Kunne ikke lage målmappen: {e}"))?;
     tauri::async_runtime::spawn_blocking(move || {
-        utfor::utfor(&plan, &|ferdig, total| {
+        let res = utfor::utfor(&plan, &|ferdig, total| {
             if ferdig % 10 == 0 || ferdig == total {
                 let _ = app.emit("fremdrift", Fremdrift { fase: "kopierer", ferdig, total });
             }
-        })
+        })?;
+        // Rapporten er en hjelp, ikke en del av kopieringen. Feiler den, er bildene likevel kopiert.
+        let _ = rapport::skriv(&plan, &res, kilde.as_deref().unwrap_or(""));
+        Ok::<_, anyhow::Error>(res)
     })
     .await
     .map_err(|e| e.to_string())?
@@ -237,7 +255,11 @@ async fn telefon_hent(app: AppHandle, id: String, navn: String, mal: String) -> 
 #[tauri::command]
 async fn angre(mal: String) -> Result<usize, String> {
     // Kan flytte mange filer, så det skjer utenfor hovedtråden og grensesnittet ikke fryser.
-    tauri::async_runtime::spawn_blocking(move || utfor::angre_siste(Path::new(&mal)))
+    tauri::async_runtime::spawn_blocking(move || {
+        let flyttet = utfor::angre_siste(Path::new(&mal))?;
+        let _ = rapport::skriv_angret(Path::new(&mal), flyttet);
+        Ok::<_, anyhow::Error>(flyttet)
+    })
         .await
         .map_err(|e| e.to_string())?
         .map_err(|e| format!("{e:#}"))
@@ -272,6 +294,130 @@ fn google_klient(app: &AppHandle) -> Result<google::Klient, String> {
         "Google-innlogging er ikke satt opp i denne versjonen. Legg google-klient.json i {}",
         steder.first().map(|p| p.display().to_string()).unwrap_or_default()
     ))
+}
+
+/// App-ID-en fra Azure (ikke hemmelig). Bygges inn fra CLOUDJUMPER_ONEDRIVE_KLIENT, eller leses fra
+/// onedrive-klient.txt i appens innstillingsmappe eller ved siden av programmet.
+fn onedrive_klient(app: &AppHandle) -> Option<onedrive::Klient> {
+    let id = option_env!("CLOUDJUMPER_ONEDRIVE_KLIENT").map(str::to_string).or_else(|| {
+        let mut steder = Vec::new();
+        if let Ok(d) = app.path().app_config_dir() {
+            steder.push(d.join("onedrive-klient.txt"));
+        }
+        if let Some(d) = std::env::current_exe().ok().and_then(|e| e.parent().map(Path::to_path_buf)) {
+            steder.push(d.join("onedrive-klient.txt"));
+        }
+        steder.iter().find_map(|s| std::fs::read_to_string(s).ok())
+    })?;
+    let id = id.trim().to_string();
+    (!id.is_empty()).then_some(onedrive::Klient { client_id: id })
+}
+
+#[derive(Serialize)]
+struct OneDriveStatus {
+    satt_opp: bool,
+    innlogget: bool,
+}
+
+#[tauri::command]
+fn onedrive_status(app: AppHandle) -> OneDriveStatus {
+    OneDriveStatus { satt_opp: onedrive_klient(&app).is_some(), innlogget: onedrive::er_innlogget() }
+}
+
+#[tauri::command]
+async fn onedrive_logg_inn(app: AppHandle) -> Result<String, String> {
+    let klient = onedrive_klient(&app).ok_or("OneDrive er ikke satt opp i denne versjonen")?;
+    tauri::async_runtime::spawn_blocking(move || {
+        onedrive::logg_inn(&klient, &|adresse| {
+            tauri_plugin_opener::open_url(adresse, None::<&str>).map_err(|e| anyhow::anyhow!(e.to_string()))
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+    .map_err(|e| format!("{e:#}"))
+}
+
+#[tauri::command]
+fn onedrive_logg_ut() -> Result<(), String> {
+    onedrive::logg_ut().map_err(|e| format!("{e:#}"))
+}
+
+/// Laster ned bildene og videoene fra OneDrive til `<samling>/.cloudjumper/onedrive`, som så skannes.
+#[tauri::command]
+async fn onedrive_hent(app: AppHandle, mal: String) -> Result<onedrive::Henting, String> {
+    let klient = onedrive_klient(&app).ok_or("OneDrive er ikke satt opp i denne versjonen")?;
+    if mal.trim().is_empty() {
+        return Err("Velg hvor bildene skal samles.".into());
+    }
+    utfor::flytt_gammel_mappe(Path::new(&mal));
+    let mappe = PathBuf::from(&mal).join(utfor::LOGGMAPPE).join("onedrive");
+    tauri::async_runtime::spawn_blocking(move || {
+        onedrive::hent(&klient, &mappe, &|ferdig, total| {
+            let _ = app.emit("fremdrift", Fremdrift { fase: "onedrive", ferdig, total });
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+    .map_err(|e| format!("{e:#}"))
+}
+
+/// App-nøkkelen fra Dropbox (ikke hemmelig). Bygges inn fra CLOUDJUMPER_DROPBOX_NOKKEL, eller leses fra
+/// dropbox-nokkel.txt i appens innstillingsmappe eller ved siden av programmet.
+fn dropbox_klient(app: &AppHandle) -> Option<dropbox::Klient> {
+    let nokkel = option_env!("CLOUDJUMPER_DROPBOX_NOKKEL").map(str::to_string).or_else(|| {
+        let mut steder = Vec::new();
+        if let Ok(d) = app.path().app_config_dir() {
+            steder.push(d.join("dropbox-nokkel.txt"));
+        }
+        if let Some(d) = std::env::current_exe().ok().and_then(|e| e.parent().map(Path::to_path_buf)) {
+            steder.push(d.join("dropbox-nokkel.txt"));
+        }
+        steder.iter().find_map(|s| std::fs::read_to_string(s).ok())
+    })?;
+    let nokkel = nokkel.trim().to_string();
+    (!nokkel.is_empty()).then_some(dropbox::Klient { app_key: nokkel })
+}
+
+#[tauri::command]
+fn dropbox_status(app: AppHandle) -> OneDriveStatus {
+    OneDriveStatus { satt_opp: dropbox_klient(&app).is_some(), innlogget: dropbox::er_innlogget() }
+}
+
+#[tauri::command]
+async fn dropbox_logg_inn(app: AppHandle) -> Result<String, String> {
+    let klient = dropbox_klient(&app).ok_or("Dropbox er ikke satt opp i denne versjonen")?;
+    tauri::async_runtime::spawn_blocking(move || {
+        dropbox::logg_inn(&klient, &|adresse| {
+            tauri_plugin_opener::open_url(adresse, None::<&str>).map_err(|e| anyhow::anyhow!(e.to_string()))
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+    .map_err(|e| format!("{e:#}"))
+}
+
+#[tauri::command]
+fn dropbox_logg_ut() -> Result<(), String> {
+    dropbox::logg_ut().map_err(|e| format!("{e:#}"))
+}
+
+/// Laster ned bildene og videoene fra Dropbox til `<samling>/.cloudjumper/dropbox`, som så skannes.
+#[tauri::command]
+async fn dropbox_hent(app: AppHandle, mal: String) -> Result<dropbox::Henting, String> {
+    let klient = dropbox_klient(&app).ok_or("Dropbox er ikke satt opp i denne versjonen")?;
+    if mal.trim().is_empty() {
+        return Err("Velg hvor bildene skal samles.".into());
+    }
+    utfor::flytt_gammel_mappe(Path::new(&mal));
+    let mappe = PathBuf::from(&mal).join(utfor::LOGGMAPPE).join("dropbox");
+    tauri::async_runtime::spawn_blocking(move || {
+        dropbox::hent(&klient, &mappe, &|ferdig, total| {
+            let _ = app.emit("fremdrift", Fremdrift { fase: "dropbox", ferdig, total });
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+    .map_err(|e| format!("{e:#}"))
 }
 
 #[derive(Serialize)]
@@ -725,6 +871,11 @@ async fn pause(d: std::time::Duration) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Feilsøking uten vindu: `cloudjumper.exe --telefontest` skriver hva den finner på telefonen til en tekstfil.
+    if std::env::args().any(|a| a == "--telefontest") {
+        telefontest();
+        return;
+    }
     let bygger = tauri::Builder::default();
     // Starter man appen en gang til, hentes vinduet som allerede er åpent fram. Telefonen har bare ett vindu.
     #[cfg(desktop)]
@@ -756,6 +907,14 @@ pub fn run() {
             angre,
             telefoner,
             telefon_hent,
+            onedrive_status,
+            onedrive_logg_inn,
+            onedrive_logg_ut,
+            onedrive_hent,
+            dropbox_status,
+            dropbox_logg_inn,
+            dropbox_logg_ut,
+            dropbox_hent,
             apne_mappe,
             google_status,
             google_bestill,
@@ -785,4 +944,29 @@ fn hent_fram(app: &AppHandle) {
         let _ = vindu.show();
         let _ = vindu.set_focus();
     }
+}
+
+fn telefontest() {
+    use std::fmt::Write;
+    let mut ut = String::new();
+    match cloudjumper_telefon::finn() {
+        Ok(liste) => {
+            let _ = writeln!(ut, "Fant {} enheter", liste.len());
+            for t in liste {
+                let start = std::time::Instant::now();
+                match cloudjumper_telefon::tell(&t.id) {
+                    Ok((n, b)) => {
+                        let _ = writeln!(ut, "{}: {n} bilder/videoer, {:.1} GB, {:.1} s", t.navn, b as f64 / 1e9, start.elapsed().as_secs_f64());
+                    }
+                    Err(e) => {
+                        let _ = writeln!(ut, "{}: feil: {e:#}", t.navn);
+                    }
+                }
+            }
+        }
+        Err(e) => {
+            let _ = writeln!(ut, "Feil: {e:#}");
+        }
+    }
+    let _ = std::fs::write(std::env::temp_dir().join("cloudjumper-telefontest.txt"), ut);
 }

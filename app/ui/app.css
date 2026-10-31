@@ -150,3 +150,14 @@ table.tall td:last-child { text-align: right; font-weight: bold; }
 .veiviser .stor-linje { height: 28px; max-width: 700px; }
 .veiviser .avansert-lenke { margin-top: auto; align-self: flex-end; font-size: 13px; }
 .veiviser .stor-varsel { font-size: 16px; margin: 0 0 14px; max-width: 46em; }
+
+/* Like bilder side om side i veiviseren */
+.veiviser .par { display: flex; gap: 20px; flex-wrap: wrap; margin: 10px 0; }
+.veiviser .stort-kort { width: 300px; border: 2px solid #aca899; background: #fff; padding: 10px; font-size: 16px; line-height: 1.5; }
+.veiviser .stort-kort:first-child { border: 3px solid #2fb32f; background: #f4fbf4; }
+.veiviser .stort-kort img { width: 100%; height: 220px; object-fit: contain; background: #ddd; display: block; margin: 6px 0; }
+.veiviser .stort-kort .merke { font-weight: bold; font-size: 18px; }
+.veiviser .knapperad { display: flex; gap: 12px; }
+
+/* «Større tekst»: alt i veiviseren blir omtrent en fjerdedel større */
+body.stor-skrift .veiviser .window-body { zoom: 1.25; }

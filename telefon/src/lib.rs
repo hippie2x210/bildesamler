@@ -70,11 +70,16 @@ pub fn allerede_hentet(sti: &Path, storrelse: Option<u64>) -> bool {
 mod wpd;
 
 #[cfg(windows)]
-pub use wpd::{finn, hent};
+pub use wpd::{finn, hent, tell};
 
 #[cfg(not(windows))]
 pub fn finn() -> anyhow::Result<Vec<Telefon>> {
     Ok(Vec::new())
+}
+
+#[cfg(not(windows))]
+pub fn tell(_id: &str) -> anyhow::Result<(usize, u64)> {
+    Ok((0, 0))
 }
 
 #[cfg(not(windows))]

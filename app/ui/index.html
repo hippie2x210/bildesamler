@@ -20,9 +20,13 @@
         <div class="store-valg">
           <button class="stor" data-gaa="google">📷 Google Foto<small>Bildene du har tatt med mobilen og lagret hos Google</small></button>
           <button class="stor" data-gaa="telefon">📱 Mobilen<small>Koble telefonen til PC-en med ladekabelen</small></button>
+          <button class="stor" data-gaa="onedrive" id="vvOneDriveValg" hidden>☁️ OneDrive<small>Bilder lagret i Microsoft OneDrive</small></button>
+          <button class="stor" data-gaa="dropbox" id="vvDropboxValg" hidden>📦 Dropbox<small>Bilder lagret i Dropbox</small></button>
           <button class="stor" data-gaa="mappe">🗂️ En mappe eller minnepinne<small>Bilder som allerede ligger på PC-en eller en disk</small></button>
         </div>
         <p class="trygt">CloudJumper lager kopier. Originalbildene blir alltid liggende der de er, og ingenting slettes.</p>
+        <p class="liten" id="vvHvor" hidden>Bildene samles i <b id="vvHvorSti"></b>. <a href="#" id="vvEndreSamling">Bytt mappe</a></p>
+        <p class="liten" id="vvSist" hidden></p>
       </section>
 
       <section data-steg="google" hidden>
@@ -62,6 +66,23 @@
         <button class="tilbake" data-gaa="start">‹ Tilbake</button>
       </section>
 
+      <section data-steg="onedrive" hidden>
+        <h1>Bilder fra OneDrive</h1>
+        <p class="stor-tekst">Logg inn med Microsoft-kontoen din. CloudJumper får bare lov til å lese, ikke endre eller slette noe.</p>
+        <p class="liten">Microsoft viser «Ubekreftet» ved innloggingen. Det er normalt for små programmer som ikke er laget av et firma.</p>
+        <button class="stor-knapp hoved-knapp" id="vvOneDriveLoggInn">Logg inn på OneDrive</button>
+        <p class="liten" id="vvOneDriveTekst"></p>
+        <button class="tilbake" data-gaa="start">‹ Tilbake</button>
+      </section>
+
+      <section data-steg="dropbox" hidden>
+        <h1>Dropbox</h1>
+        <p class="stor-tekst">Trykk knappen og logg inn på Dropbox i nettleseren. CloudJumper får bare lov til å lese bildene, ikke endre eller slette noe.</p>
+        <button class="stor-knapp hoved-knapp" id="vvDropboxLoggInn">Logg inn på Dropbox</button>
+        <p class="liten" id="vvDropboxTekst"></p>
+        <button class="tilbake" data-gaa="start">‹ Tilbake</button>
+      </section>
+
       <section data-steg="mappe" hidden>
         <h1>Hvor ligger bildene?</h1>
         <p>Velg mappen, minnepinnen eller disken med bildene.</p>
@@ -90,20 +111,35 @@
         <h1>Dette fant CloudJumper</h1>
         <ul class="funn" id="vvFunn"></ul>
         <div class="varsel stor-varsel" id="vvVarsler" hidden></div>
+        <p class="liten" id="vvKopierTil"></p>
         <button class="stor-knapp hoved-knapp" id="vvKopier">Kopier bildene til samlingen</button>
-        <p class="liten">Vil du se detaljene først? <a href="#" id="vvDetaljer">Vis detaljer</a></p>
+        <button class="stor-knapp" id="vvSeLike" hidden>Se de like bildene side om side</button>
+        <p class="liten">Ingenting er kopiert ennå. Vil du se alle detaljene først? <a href="#" id="vvDetaljer">Vis detaljer</a></p>
         <button class="tilbake" data-gaa="start">‹ Avbryt</button>
+      </section>
+
+      <section data-steg="like" hidden>
+        <h1 id="vvLikeTittel">Like bilder</h1>
+        <p class="stor-tekst">CloudJumper beholder bildet til venstre i samlingen. Det til høyre legges i «Duplikater», så ingenting forsvinner.</p>
+        <div class="par" id="vvPar"></div>
+        <div class="knapperad">
+          <button class="stor-knapp" id="vvForrige">‹ Forrige</button>
+          <button class="stor-knapp" id="vvNeste">Neste ›</button>
+        </div>
+        <button class="tilbake" id="vvTilOversikt">‹ Tilbake til oversikten</button>
       </section>
 
       <section data-steg="ferdig" hidden>
         <h1>Ferdig! 🎉</h1>
         <p class="stor-tekst" id="vvFerdigTekst"></p>
         <button class="stor-knapp hoved-knapp" id="vvApne">Se bildene</button>
+        <p class="liten">I samlingen ligger filen «Hva CloudJumper har gjort.txt» med en oversikt over alt som er gjort.</p>
+        <p class="liten">Ble noe feil? <a href="#" id="vvAngre">Angre denne kopieringen</a></p>
         <button class="tilbake" data-gaa="start">Til start</button>
       </section>
 
       <div id="vvFeil" class="feil stor-tekst" hidden></div>
-      <p class="avansert-lenke"><a href="#" id="vvAvansert">Avansert visning</a></p>
+      <p class="avansert-lenke"><a href="#" id="vvStorTekst">Større tekst</a> · <a href="#" id="vvAvansert">Avansert visning</a></p>
     </div>
   </div>
 

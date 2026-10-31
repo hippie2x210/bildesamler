@@ -91,9 +91,11 @@ fn nesten_like(a: &Fil, b: &Fil) -> bool {
 }
 
 /// Høyere er bedre. Riktig dato og metadata teller mest, deretter kvalitet.
-fn rangering(f: &Fil) -> (u8, bool, bool, u64, u64, bool, std::cmp::Reverse<usize>) {
+/// Et bilde som allerede er i samlingen, beholdes framfor nye kopier, med mindre en ny kopi har sikrere dato.
+fn rangering(f: &Fil) -> (u8, bool, bool, bool, u64, u64, bool, std::cmp::Reverse<usize>) {
     (
         f.tillit as u8,
+        f.i_samlingen,
         f.kamera.is_some(),
         f.har_gps,
         f.piksler(),

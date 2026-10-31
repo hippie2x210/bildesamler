@@ -5,12 +5,17 @@ use anyhow::{Context, Result};
 use chrono::{DateTime, Local, NaiveDateTime};
 use std::fs;
 use std::io;
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use crate::metadata;
 
 /// Mappe under samlingens loggmappe der Takeout-zip-er pakkes ut.
 pub const UTPAKKET: &str = "takeout";
+
+/// Merke i en utpakket mappe om at hele zip-en er pakket ut. Inneholder zip-ens størrelse.
+const FERDIG: &str = "cloudjumper-ferdig.txt";
 
 pub fn er_zip(sti: &Path) -> bool {
     sti.extension().is_some_and(|e| e.eq_ignore_ascii_case("zip"))
@@ -184,8 +189,18 @@ pub fn forbered_kilder(
         fremdrift(i, zipper.len());
         let stamme = zip.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
         let mappe = rot.join(stamme);
+        // Bilder som er sortert, er flyttet ut av mappen. En ferdig zip pakkes derfor ikke ut igjen.
+        let merke = mappe.join(FERDIG);
+        let storrelse = fs::metadata(zip).map(|m| m.len().to_string()).unwrap_or_default();
+        if fs::read_to_string(&merke).is_ok_and(|s| s.trim() == storrelse) {
+            nye.extend(foto_mapper(&mappe));
+            continue;
+        }
         match pakk_ut(zip, &mappe) {
-            Ok(_) => nye.extend(foto_mapper(&mappe)),
+            Ok(_) => {
+                let _ = fs::write(&merke, &storrelse);
+                nye.extend(foto_mapper(&mappe))
+            }
             Err(e) => varsler.push(format!("{e:#}")),
         }
     }
@@ -223,16 +238,11 @@ pub fn finn_sidecar(sti: &Path) -> Option<PathBuf> {
         kandidater.push(original);
     }
 
-    let jsonfiler: Vec<String> = fs::read_dir(mappe)
-        .ok()?
-        .filter_map(Result::ok)
-        .map(|e| e.file_name().to_string_lossy().into_owned())
-        .filter(|n| n.to_lowercase().ends_with(".json"))
-        .collect();
+    let json = jsonfiler(mappe)?;
 
     for kandidat in &kandidater {
         let fullt = format!("{kandidat}.supplemental-metadata");
-        let beste = jsonfiler
+        let beste = json
             .iter()
             .filter_map(|j| {
                 let (stamme, j_teller) = skill_ut_teller(&j[..j.len() - 5]);
@@ -248,6 +258,36 @@ pub fn finn_sidecar(sti: &Path) -> Option<PathBuf> {
         }
     }
     None
+}
+
+type Mapper = Mutex<HashMap<PathBuf, Arc<Vec<String>>>>;
+
+/// JSON-filene i hver mappe. En Takeout-mappe kan ha titusenvis av filer, og uten dette ble
+/// hele mappen lest én gang for hvert bilde i den.
+fn mapper() -> &'static Mapper {
+    static M: OnceLock<Mapper> = OnceLock::new();
+    M.get_or_init(Default::default)
+}
+
+/// Glemmer mappene som er lest, så en ny skanning ser filer som har kommet til siden sist.
+pub fn glem_mapper() {
+    mapper().lock().unwrap().clear();
+}
+
+fn jsonfiler(mappe: &Path) -> Option<Arc<Vec<String>>> {
+    if let Some(l) = mapper().lock().unwrap().get(mappe) {
+        return Some(l.clone());
+    }
+    let liste: Arc<Vec<String>> = Arc::new(
+        fs::read_dir(mappe)
+            .ok()?
+            .filter_map(Result::ok)
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .filter(|n| n.to_lowercase().ends_with(".json"))
+            .collect(),
+    );
+    mapper().lock().unwrap().insert(mappe.to_path_buf(), liste.clone());
+    Some(liste)
 }
 
 /// `IMG_1(2).jpg` → (`IMG_1.jpg`, Some(2)). `IMG_1.jpg(2)` → (`IMG_1.jpg`, Some(2)).

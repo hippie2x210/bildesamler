@@ -20,6 +20,8 @@
 .mobil #vvGmail { display: none !important; }
 /* «Koble mobilen til PC-en» gir ingen mening når appen allerede kjører på mobilen. */
 .mobil #veiviser [data-gaa="telefon"] { display: none !important; }
+/* OneDrive- og Dropbox-innloggingen er laget for PC og ikke prøvd på telefonen ennå. */
+.mobil #vvOneDriveValg, .mobil #vvDropboxValg { display: none !important; }
 
 /* Felles for mappevelgeren og tilgangssiden: dekker hele skjermen over alt annet. */
 .mobil-velger, .mobil-tilgang {

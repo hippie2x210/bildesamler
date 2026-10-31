@@ -140,6 +140,7 @@ mod tester {
             datokilde: Datokilde::Ingen,
             tillit: Tillit::Ingen,
             advarsler: Vec::new(),
+            i_samlingen: false,
         }
     }
 

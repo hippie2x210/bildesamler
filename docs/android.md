@@ -6,8 +6,7 @@ Den sletter aldri noe.
 
 ## Installere
 
-1. Åpne GitHub på telefonen og logg inn (repoet er privat):
-   **Releases → «CloudJumper for Android (siste testbygg)» → CloudJumper.apk**.
+1. Åpne GitHub på telefonen: **Releases → «CloudJumper for Android (siste testbygg)» → CloudJumper.apk**.
    Alternativt: last ned `CloudJumper-Android` fra siste kjøring under **Actions** på PC-en og flytt APK-en til telefonen.
 2. Trykk på den nedlastede filen. Første gang spør telefonen om nettleseren får «installere ukjente apper». Si ja.
 3. Google Play Protect kan si at appen er ukjent. Velg **Installer likevel** (appen er ikke lagt ut i Play-butikken).
@@ -47,5 +46,5 @@ Lokalt: `cd app && npx tauri android build --apk` (krever Android SDK og NDK, se
 ## Ikke ferdig ennå på telefonen
 
 * Gmail-sjekken for Takeout-e-posten (finnes på PC).
-* Henting fra OneDrive og Dropbox (kommer i steg 2, samme som på PC).
+* Henting fra OneDrive og Dropbox (finnes på PC, skjult på telefonen til innloggingen er prøvd der).
 * iPhone.
