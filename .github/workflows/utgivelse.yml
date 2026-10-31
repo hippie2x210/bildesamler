@@ -1,0 +1,130 @@
+name: Utgivelse
+
+# Lager en ny versjon av CloudJumper når en tagg som v0.1.0 skyves til GitHub.
+# Installasjonsfilen bygges her fra kildekoden, signeres hos SignPath (når prosjektet er godkjent),
+# og legges ut som en GitHub-utgivelse. Se docs/kodesignering.md.
+
+on:
+  push:
+    tags: ['v*']
+  # Manuell kjøring bygger og signerer. Med «publiser» lages også taggen og utgivelsen.
+  workflow_dispatch:
+    inputs:
+      publiser:
+        description: Lag tagg og utgivelse for versjonen i tauri.conf.json
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  bygg:
+    name: Bygg installasjonsfil
+    runs-on: windows-latest
+    outputs:
+      artifact-id: ${{ steps.usignert.outputs.artifact-id }}
+      tagg: ${{ steps.versjon.outputs.tagg }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Sjekk at taggen og versjonen i appen er like
+        id: versjon
+        shell: bash
+        run: |
+          versjon=$(node -p "require('./app/src-tauri/tauri.conf.json').version")
+          echo "tagg=v$versjon" >> "$GITHUB_OUTPUT"
+          if [ "$GITHUB_REF_TYPE" = "tag" ] && [ "v$versjon" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Taggen er $GITHUB_REF_NAME, men tauri.conf.json sier $versjon"
+            exit 1
+          fi
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - name: Test kjernen mot fasiten
+        run: cargo test -p cloudjumper-kjerne --release
+      - name: Installer Tauri CLI
+        working-directory: app
+        run: npm ci
+      - name: Bygg installasjonsfil
+        working-directory: app
+        run: npx tauri build
+        env:
+          CLOUDJUMPER_ONEDRIVE_KLIENT: ${{ secrets.CLOUDJUMPER_ONEDRIVE_KLIENT }}
+          CLOUDJUMPER_DROPBOX_NOKKEL: ${{ secrets.CLOUDJUMPER_DROPBOX_NOKKEL }}
+      - id: usignert
+        uses: actions/upload-artifact@v4
+        with:
+          name: CloudJumper-usignert
+          path: target/release/bundle/nsis/*.exe
+          if-no-files-found: error
+
+  signer:
+    name: Signer hos SignPath
+    needs: bygg
+    # Står av til SignPath har godkjent prosjektet og variabelen er lagt inn.
+    if: vars.SIGNPATH_ORGANIZATION_ID != ''
+    runs-on: ubuntu-latest
+    # Hver signering må godkjennes for hånd i SignPath. Jobben venter på det i opptil 6 timer.
+    timeout-minutes: 370
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: signpath/github-action-submit-signing-request@v2
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG || 'cloudjumper' }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG || 'release-signing' }}
+          github-artifact-id: ${{ needs.bygg.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 21600
+          output-artifact-directory: signert
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CloudJumper-signert
+          path: signert/*.exe
+          if-no-files-found: error
+
+  publiser:
+    name: Legg ut på GitHub
+    needs: [bygg, signer]
+    if: >-
+      always() && (startsWith(github.ref, 'refs/tags/v') || inputs.publiser) &&
+      needs.bygg.result == 'success' &&
+      (needs.signer.result == 'success' || needs.signer.result == 'skipped')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.signer.result == 'success' && 'CloudJumper-signert' || 'CloudJumper-usignert' }}
+          path: utgivelse
+      - name: Lag utgivelse
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SIGNERT: ${{ needs.signer.result == 'success' }}
+          TAGG: ${{ needs.bygg.outputs.tagg }}
+        run: |
+          if [ "$SIGNERT" = "true" ]; then
+            signering="Installasjonsfilen er signert. Free code signing provided by [SignPath.io](https://signpath.io), certificate by [SignPath Foundation](https://signpath.org)."
+          else
+            signering="Installasjonsfilen er ikke signert ennå, så Windows kan vise «Windows beskyttet PCen». Trykk «Mer informasjon» og «Kjør likevel»."
+          fi
+          cat > notater.md <<EOF
+          Last ned \`$(ls utgivelse)\` og dobbeltklikk for å installere CloudJumper på Windows 10 eller 11.
+
+          $signering
+
+          [Code signing policy](https://github.com/$GITHUB_REPOSITORY#code-signing-policy) · [Personvern / privacy](https://github.com/$GITHUB_REPOSITORY/blob/$TAGG/PERSONVERN.md)
+          EOF
+          # --target lager taggen på denne committen hvis den ikke finnes fra før.
+          gh release create "$TAGG" utgivelse/*.exe \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "CloudJumper ${TAGG#v}" \
+            --notes-file notater.md
